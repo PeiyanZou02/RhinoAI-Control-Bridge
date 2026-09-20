@@ -29,7 +29,7 @@ namespace RhinoAI
                     return Reply(new JObject{["name"]="server_"+filename,["subfolder"]=folder}.ToString());
                 }
                 if(request.Method==HttpMethod.Get&&path=="/userdata")return Reply("[{\"path\":\"old.json\",\"modified\":1},{\"path\":\"sub\\\\new.json\",\"modified\":9},{\"path\":\"notes.txt\",\"modified\":5}]");
-                if(request.Method==HttpMethod.Get&&path=="/userdata/rhino_ai_frontend_status.json")return Reply("{\"version\":24,\"state\":\"bound\",\"active\":\"CHOGA.json\",\"images\":9}");
+                if(request.Method==HttpMethod.Get&&path=="/userdata/rhino_ai_frontend_status.json")return Reply("{\"version\":25,\"state\":\"bound\",\"active\":\"CHOGA.json\",\"images\":9}");
                 if(request.Method==HttpMethod.Post&&path=="/userdata/rhino_ai_latest.json"){Published=JObject.Parse(await request.Content.ReadAsStringAsync());return Reply("{}");}
                 throw new Exception("Forbidden/unexpected request: "+request.Method+" "+path);
             }
@@ -82,7 +82,7 @@ namespace RhinoAI
             check(styled.Calls.All(x=>!x.Contains("/prompt")&&!x.Contains("/queue")),"style references do not start a generation");
             var crowded=Enumerable.Range(0,14).ToDictionary(i=>new[]{"reference","placement","scale_lock","shape_lock","rendered","depth","edges","silhouette","normal","mask","material_id","object_mask","inpaint_mask","occlusion_mask"}[i],i=>png);crowded["style_reference_1"]=photo;
             check(!ComfyClient.SelectForBatch(crowded,new Config{ProductMode=true,DetailPriority=false}).ContainsKey("style_reference_1"),"a full 14-image batch leaves the style photos out instead of failing");
-            check(ComfyClient.DescribeStatus(new JObject{["version"]=23,["state"]="bound"},"").Contains("outdated"),"extension without style reference support is reported as outdated");
+            check(ComfyClient.DescribeStatus(new JObject{["version"]=24,["state"]="bound"},"").Contains("outdated"),"extension without style reference support is reported as outdated");
             return count+" sync checks passed";
         }
     }

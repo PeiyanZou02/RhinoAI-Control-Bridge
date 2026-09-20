@@ -39,7 +39,7 @@ const ROLES = {
   edges_detail:"high-resolution local hole, crease, thin-edge and internal part-boundary reference",
   depth_detail:"high-resolution local front-to-back order and relative depth reference",
   shape_lock:"PRIMARY geometry reference; preserve the exact object count, silhouette, openings, gaps, overlaps, part boundaries, proportions and camera",
-  rendered:"secondary surface-volume and curvature reference; do not copy its temporary white material, lighting or background",
+  rendered:"secondary surface-volume and curvature reference; do not copy its temporary CAD display colors, layer tints, white material, lighting or background",
   placement:"ABSOLUTE FULL-FRAME authority for final object position, pixel size, rotation and silhouette bounds. Copy the object at exactly the scale and location shown in this complete canvas; do not enlarge, shrink or move it based on any detail image",
   scale_lock:"TECHNICAL MEASUREMENT INPUT ONLY, never an appearance reference. Its magenta silhouette, bounding rectangle and center crosshair encode only the exact final object extrema and center on the complete canvas. Treat every magenta pixel and every thin box/crosshair line as invisible metadata. The final object must touch the same left/right/top/bottom bounds without exceeding them, but the output must contain none of these marks. Reconstruct clean photograph pixels behind the marks from reference and placement",
   depth:"front-to-back order and relative spatial-depth reference",
@@ -58,9 +58,14 @@ const STYLE_PREFIX = "style_reference_";
 const STYLE_ROLE = "STYLE REFERENCE ONLY, never a geometry or composition reference; a real photograph chosen by the user for its look";
 const STYLE_RULE = "STYLE TRANSFER RULE: study the style_reference photographs and extract only their photographic qualities: light quality, direction and softness, exposure, dynamic range, white balance, color grading, contrast, material realism and surface imperfection, reflections, atmosphere, depth of field, lens character and film or sensor grain. Render the Rhino scene with those qualities so the result reads as a real photograph of the same kind, not a CG image. Never copy their objects, architecture, furniture, people, text, composition, framing or camera. Geometry, camera, object count and material regions come only from the Rhino control images, and the material mapping still decides what each region is made of.";
 const STYLE_BLEND = " In this background blend the reference photograph still controls the appearance of the whole frame; use the style references only for the realism of the inserted object's materials.";
+// Image models tend to read the ID colors as paint. Keep both texts in step with PromptGuide in src/AiClient.cs.
+const MATERIAL_ID_BAN = "MANDATORY MATERIAL ID COLOR BAN: the flat colors in the material_id images are arbitrary index labels, like the numbers on a paint-by-number sheet. They carry ZERO information about the real color, hue, tint, paint, stain, dye, lighting or mood of any surface. The same label colors may also show through as CAD display tints in rendered, shape_lock or other technical images; there too they are labels, never appearance. It is strictly forbidden to reproduce, echo, tint toward or be influenced by any ID color anywhere in the final image, including floors, walls, furniture, backgrounds, reflections and light. A purple ID region mapped to plywood must look like natural plywood, never purple wood; a red ID region mapped to oak must look like natural oak, never red. The color of every surface comes only from the real-world appearance of its mapped target material, the written instructions and any style reference.";
+const MATERIAL_ID_CHECK = "FINAL MATERIAL COLOR CHECK BEFORE OUTPUT: for every material region compare its final hue with its ID color. If they resemble each other and the mapped material would not naturally have that hue, the image is wrong: repaint that region in the natural color of its mapped material. No saturated ID color may survive in the output.";
 export function imageGuide(data, channels=channelsFor(data)) {
+  const ids=channels.some(key=>key.startsWith("material_id"));
   const lines=channels.map((key,index)=>`Image ${index+1} (${key}): ${key.startsWith(STYLE_PREFIX)?STYLE_ROLE:ROLES[key]||"additional visual reference; use only for the information visibly encoded in this image"}.`);
   if(channels.includes("scale_lock"))lines.unshift("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual object.");
+  if(ids)lines.unshift(MATERIAL_ID_BAN);
   if(channels.includes("reference"))lines.unshift("MANDATORY REFERENCE APPEARANCE LOCK: reference alone controls the complete frame's color or monochrome mode, white balance, exposure, brightness, contrast, tonal range, colors and background. Never average, blend or transfer appearance from scale_lock, placement, masks, depth, normals, edges, shape_lock or material_id; they are technical data only.");
   const materials=String(data.prompts?.color_materials||"").trim();
   const userInstruction=String(data.prompts?.user_prompt||"").trim();
@@ -73,9 +78,10 @@ export function imageGuide(data, channels=channelsFor(data)) {
   }
   if(channels.some(key=>key.startsWith(STYLE_PREFIX)))lines.push(STYLE_RULE+(channels.includes("reference")?STYLE_BLEND:""));
   if(placementConstraint)lines.push(placementConstraint);
-  if(materials)lines.push("Material mapping for the material_id image:\n"+materials);
+  if(materials)lines.push("Material mapping for the material_id image. Each hex value is only a lookup key that identifies a region; it is never a color to paint:\n"+materials);
   if(userInstruction)lines.push("Rhino user instruction — follow this requested edit exactly:\n"+userInstruction);
   if(channels.includes("scale_lock"))lines.push("FINAL VALIDATION BEFORE OUTPUT: inspect the completed image and remove every technical overlay originating from scale_lock. The finished photograph may contain the real object only, with zero bounding box, crosshair, guide line, measurement mark or colored annotation. Compare every pixel outside the object edit region against reference and restore its original brightness, contrast, tonal range and color exactly.");
+  if(ids)lines.push(MATERIAL_ID_CHECK);
   return ROLE_START+"\n"+lines.join("\n")+"\n"+ROLE_END;
 }
 

@@ -50,7 +50,7 @@ namespace RhinoAI
         public static string DescribeStatus(JObject status,string target)
         {
             if(status==null)return "The ComfyUI window has not loaded the sync extension";
-            if(((int?)status["version"]??0)<24)return "The ComfyUI sync extension is outdated: run install-comfy-extension.ps1 again, then press F5 in ComfyUI";
+            if(((int?)status["version"]??0)<25)return "The ComfyUI sync extension is outdated: run install-comfy-extension.ps1 again, then press F5 in ComfyUI";
             string active=(string)status["active"],state=(string)status["state"];
             string where=string.IsNullOrEmpty(active)?"ComfyUI shows an unsaved workflow":"ComfyUI shows "+active;
             if(state=="error")return where+" · sync failed: "+(string)status["message"];
