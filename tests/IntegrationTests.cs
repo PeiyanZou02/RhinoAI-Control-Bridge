@@ -39,9 +39,9 @@ namespace RhinoAI
             using(var map=new Bitmap(files["mask"]))Assert(map.GetPixel(0,0).R==0&&map.GetPixel(32,32).R==255,"binary foreground mask");
             Assert(Raster.Palette(1)==0xff1744&&Raster.Palette(2)==0x00e5ff&&Raster.Palette(3)==0xffea00,"first material IDs use visibly separated red, cyan and yellow");
             bool[] seed=new bool[25];seed[12]=true;var expanded=ProductExport.Dilate(seed,5,5,1);Assert(expanded.Count(x=>x)==9,"mask dilation radius");Assert(ProductExport.Dilate(seed,5,5,0).SequenceEqual(seed),"zero padding identity");
-            Assert(ProductExport.EffectivePadding(new Config{MaskPadding=12,AutoEditRegion=true},1024,589,38,40)>=80,"adaptive edit mask expands tiny product replacement area");Assert(ProductExport.EffectivePadding(new Config{MaskPadding=12,AutoEditRegion=false},1024,589,38,40)==12,"manual edit mask keeps requested padding");
+            Assert(ProductExport.EffectivePadding(new Config{MaskPadding=12,AutoEditRegion=true},1024,589,38,40)>=80,"adaptive edit mask expands tiny object replacement area");Assert(ProductExport.EffectivePadding(new Config{MaskPadding=12,AutoEditRegion=false},1024,589,38,40)==12,"manual edit mask keeps requested padding");
             bool[] tiny=new bool[21*21];tiny[10*21+10]=true;var edit=ProductExport.EditRegion(tiny,21,21,10,10,11,11,8);Assert(edit[10*21+10]&&edit[10*21+2]&&!edit[2*21+2],"edit region is a smooth ellipse, not a square dilation");
-            var export=new ExportResult{Prompt="gold material",WearPrompt="ring on finger",Files=files};
+            var export=new ExportResult{Prompt="gold material",WearPrompt="object on site",Files=files};
             var graph=JObject.Parse("{\"1\":{\"class_type\":\"LoadImage\",\"inputs\":{\"image\":\"old.png\"},\"_meta\":{\"title\":\"RHINO:depth\"}},\"2\":{\"class_type\":\"CLIPTextEncode\",\"inputs\":{\"text\":\"{{color_materials}}\"}}}");
             var bound=ComfyClient.Bind(graph,new Dictionary<string,string>{{"depth","job/depth.png"}},export);Assert((string)bound["1"]["inputs"]["image"]=="job/depth.png","LoadImage title binding");Assert((string)bound["2"]["inputs"]["text"]=="gold material","only color materials bind into optional API JSON");Assert((string)graph["1"]["inputs"]["image"]=="old.png","workflow original unchanged");
             bool rejected=false;try{ComfyClient.Bind(JObject.Parse("{\"nodes\":[]}"),new Dictionary<string,string>(),export);}catch(InvalidOperationException){rejected=true;}Assert(rejected,"reject UI workflow instead of silently submitting it");
@@ -56,7 +56,7 @@ namespace RhinoAI
             {
                 vp.SetWallpaper(pattern,false,true);config.ProductMode=true;config.LongEdge=512;
                 var productSnapshot=Exporter.Capture(doc,config);var productResult=Exporter.Render(productSnapshot,config,null);
-                Assert(productResult.Files.ContainsKey("reference")&&productResult.Files.ContainsKey("placement")&&productResult.Files.ContainsKey("inpaint_mask"),"wallpaper try-on bundle");
+                Assert(productResult.Files.ContainsKey("reference")&&productResult.Files.ContainsKey("placement")&&productResult.Files.ContainsKey("inpaint_mask"),"wallpaper blend bundle");
                 using(var bg=new Bitmap(productResult.Files["reference"]))
                 {
                     Assert(bg.Width==productSnapshot.Camera.Width&&bg.Height==productSnapshot.Camera.Height,"reference alignment dimensions");
@@ -65,7 +65,7 @@ namespace RhinoAI
                     Assert(clean>bg.Width*bg.Height*0.98,"native background capture excludes geometry");
                     bg.Save(Path.Combine(root,"wallpaper-captured.png"));
                 }
-                Assert(File.Exists(Path.Combine(productResult.Directory,"tryon.json")),"structured try-on metadata");
+                Assert(File.Exists(Path.Combine(productResult.Directory,"blend.json")),"structured blend metadata");
             }
             finally{vp.SetWallpaper(old??"",gray,visible);doc.Modified=modified;doc.Views.Redraw();}
             var send=Task.Run(async()=>{using(var client=new ComfyClient("http://127.0.0.1:8000"))return await client.Send(result,config);}).GetAwaiter().GetResult();

@@ -32,7 +32,7 @@ namespace RhinoAI
             if(running||!enabled()||RhinoDoc.ActiveDoc==null||RhinoDoc.ActiveDoc.RuntimeSerialNumber!=doc.RuntimeSerialNumber||doc.Views.ActiveView==null||RhinoApp.InCommand>0)return;
             string current=Signature();if(current!=observed){observed=current;changed=DateTime.UtcNow;return;}
             if(current==sent||(DateTime.UtcNow-changed).TotalMilliseconds<1800)return;
-            running=true;try{await sync();sent=current;}catch(Exception e){RhinoApp.WriteLine("自动同步："+e.Message);sent=current;}finally{running=false;}
+            running=true;try{await sync();sent=current;}catch(Exception e){RhinoApp.WriteLine("Auto sync: "+e.Message);sent=current;}finally{running=false;}
         }
         public void Dispose(){timer.Stop();timer.Dispose();RhinoDoc.AddRhinoObject-=Changed;RhinoDoc.DeleteRhinoObject-=Changed;RhinoDoc.UndeleteRhinoObject-=Changed;RhinoDoc.ReplaceRhinoObject-=Changed;RhinoDoc.ModifyObjectAttributes-=Changed;RhinoDoc.LayerTableEvent-=Changed;RhinoDoc.MaterialTableEvent-=Changed;}
     }

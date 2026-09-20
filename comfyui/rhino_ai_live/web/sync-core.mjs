@@ -1,8 +1,8 @@
-export const ORDER = ["reference", "placement", "scale_lock", "placement_detail", "rendered_detail", "shape_lock_detail", "material_id_detail", "normal_detail", "edges_detail", "depth_detail", "shape_lock", "rendered", "basecolor", "color_code", "depth", "depth_inverse", "lineart", "edges", "silhouette", "normal", "mask", "material_id", "object_id", "product_mask", "inpaint_mask", "occlusion_mask"];
+export const ORDER = ["reference", "placement", "scale_lock", "placement_detail", "rendered_detail", "shape_lock_detail", "material_id_detail", "normal_detail", "edges_detail", "depth_detail", "shape_lock", "rendered", "basecolor", "color_code", "depth", "depth_inverse", "lineart", "edges", "silhouette", "normal", "mask", "material_id", "object_id", "object_mask", "inpaint_mask", "occlusion_mask"];
 export const EXCLUDED = new Set(["object_id", "color_code", "basecolor", "lineart"]);
 export function channelsFor(data) {
   if(data.images.reference&&data.images.shape_lock_detail) {
-    const optimized=["reference","placement","scale_lock","shape_lock_detail","material_id_detail","normal_detail","edges_detail","depth_detail","product_mask","inpaint_mask","occlusion_mask"];
+    const optimized=["reference","placement","scale_lock","shape_lock_detail","material_id_detail","normal_detail","edges_detail","depth_detail","object_mask","inpaint_mask","occlusion_mask"];
     return [...optimized.filter(key=>data.images[key]),...Object.keys(data.images).filter(key=>!ORDER.includes(key)).sort()].filter(key=>!EXCLUDED.has(key));
   }
   return [...ORDER.filter(key=>data.images[key]), ...Object.keys(data.images).filter(key=>!ORDER.includes(key)).sort()].filter(key=>!EXCLUDED.has(key));
@@ -30,18 +30,18 @@ export function targetState(data, activePath) {
 const ROLE_START = "Use the supplied input images according to the exact roles below.";
 const ROLE_END = "Follow these roles and priorities for every generation using this input batch.";
 const ROLES = {
-  reference:"MANDATORY PRIMARY BASE IMAGE AND SOLE APPEARANCE AUTHORITY; edit directly into this photograph while preserving its subject identity, anatomy, pose, camera, composition, clothing, background and all unedited pixels. Preserve its exact color or monochrome mode, white balance, exposure, brightness, contrast, tonal range and skin tone. Never replace, recolor, dim or brighten the scene, and never output the product by itself",
-  placement_detail:"magnified placement close-up; use it to inspect the product-to-subject contact, alignment and local scale, while the full placement image remains authoritative for global position",
+  reference:"MANDATORY PRIMARY BASE IMAGE AND SOLE APPEARANCE AUTHORITY; edit directly into this photograph while preserving its scene content, people, camera, composition, perspective, background and all unedited pixels. Preserve its exact color or monochrome mode, white balance, exposure, brightness, contrast, tonal range and colors. Never replace, recolor, dim or brighten the scene, and never output the object by itself",
+  placement_detail:"magnified placement close-up; use it to inspect the contact between the inserted object and the scene, its alignment and local scale, while the full placement image remains authoritative for global position",
   rendered_detail:"magnified local appearance and volume reference; use its close-up curvature and integration cues without changing the global placement",
-  shape_lock_detail:"PRIMARY HIGH-RESOLUTION PRODUCT GEOMETRY reference; preserve its fine openings, thin parts, seams, gaps, component count, local silhouette and proportions exactly, while the full placement image controls global scale and position",
+  shape_lock_detail:"PRIMARY HIGH-RESOLUTION OBJECT GEOMETRY reference; preserve its fine openings, thin parts, seams, gaps, component count, local silhouette and proportions exactly, while the full placement image controls global scale and position",
   material_id_detail:"HIGH-RESOLUTION MATERIAL REGION AND INTERFACE reference; preserve every local material boundary, adjacency, seam, overlap, occlusion and front-to-back relationship. Never merge regions, swap materials or allow material bleeding",
   normal_detail:"high-resolution local surface-shape, orientation and fine-curvature reference",
   edges_detail:"high-resolution local hole, crease, thin-edge and internal part-boundary reference",
   depth_detail:"high-resolution local front-to-back order and relative depth reference",
   shape_lock:"PRIMARY geometry reference; preserve the exact object count, silhouette, openings, gaps, overlaps, part boundaries, proportions and camera",
   rendered:"secondary surface-volume and curvature reference; do not copy its temporary white material, lighting or background",
-  placement:"ABSOLUTE FULL-FRAME authority for final product position, pixel size, rotation and silhouette bounds. Copy the product at exactly the scale and location shown in this complete canvas; do not enlarge, shrink or move it based on any detail image",
-  scale_lock:"TECHNICAL MEASUREMENT INPUT ONLY, never an appearance reference. Its magenta silhouette, bounding rectangle and center crosshair encode only the exact final product extrema and center on the complete canvas. Treat every magenta pixel and every thin box/crosshair line as invisible metadata. The final product must touch the same left/right/top/bottom bounds without exceeding them, but the output must contain none of these marks. Reconstruct clean photograph pixels behind the marks from reference and placement",
+  placement:"ABSOLUTE FULL-FRAME authority for final object position, pixel size, rotation and silhouette bounds. Copy the object at exactly the scale and location shown in this complete canvas; do not enlarge, shrink or move it based on any detail image",
+  scale_lock:"TECHNICAL MEASUREMENT INPUT ONLY, never an appearance reference. Its magenta silhouette, bounding rectangle and center crosshair encode only the exact final object extrema and center on the complete canvas. Treat every magenta pixel and every thin box/crosshair line as invisible metadata. The final object must touch the same left/right/top/bottom bounds without exceeding them, but the output must contain none of these marks. Reconstruct clean photograph pixels behind the marks from reference and placement",
   depth:"front-to-back order and relative spatial-depth reference",
   depth_inverse:"confirmation of the same depth relationships only",
   edges:"visible crease, hole and internal part-boundary reference",
@@ -49,27 +49,27 @@ const ROLES = {
   normal:"surface shape, orientation and curvature-direction reference",
   mask:"exact foreground occupancy reference",
   material_id:"MATERIAL REGION AND INTERFACE reference; each flat color identifies one separate Rhino layer/material region. Preserve every exact region boundary, adjacency, contact seam, overlap, occlusion and front-to-back stacking relationship. Use depth, edges and normal to determine which material region is in front at every connection. Never merge regions, swap their materials, let one material bleed across a boundary, erase a seam, or reproduce the flat ID colors in the final image",
-  product_mask:"exact product-region and product-boundary reference",
-  inpaint_mask:"EDITABLE NEIGHBORHOOD reference; white marks where the old item may be removed and local pixels may be regenerated, while black must be preserved. The white region is NOT the new product silhouette or size: never scale the product to fill it; final product scale and bounds come only from the full-frame placement image",
-  occlusion_mask:"occlusion-protection reference; white protected subject pixels must remain unchanged and stay in front where appropriate"
+  object_mask:"exact object-region and object-boundary reference",
+  inpaint_mask:"EDITABLE NEIGHBORHOOD reference; white marks where existing content may be removed and local pixels may be regenerated, while black must be preserved. The white region is NOT the new object silhouette or size: never scale the object to fill it; final object scale and bounds come only from the full-frame placement image",
+  occlusion_mask:"occlusion-protection reference; white protected foreground pixels of the photograph must remain unchanged and stay in front where appropriate"
 };
 export function imageGuide(data, channels=channelsFor(data)) {
   const lines=channels.map((key,index)=>`Image ${index+1} (${key}): ${ROLES[key]||"additional visual reference; use only for the information visibly encoded in this image"}.`);
-  if(channels.includes("scale_lock"))lines.unshift("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual product.");
-  if(channels.includes("reference"))lines.unshift("MANDATORY REFERENCE APPEARANCE LOCK: reference alone controls the complete frame's color or monochrome mode, white balance, exposure, brightness, contrast, tonal range, skin tone and background. Never average, blend or transfer appearance from scale_lock, placement, masks, depth, normals, edges, shape_lock or material_id; they are technical data only.");
+  if(channels.includes("scale_lock"))lines.unshift("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual object.");
+  if(channels.includes("reference"))lines.unshift("MANDATORY REFERENCE APPEARANCE LOCK: reference alone controls the complete frame's color or monochrome mode, white balance, exposure, brightness, contrast, tonal range, colors and background. Never average, blend or transfer appearance from scale_lock, placement, masks, depth, normals, edges, shape_lock or material_id; they are technical data only.");
   const materials=String(data.prompts?.color_materials||"").trim();
   const userInstruction=String(data.prompts?.user_prompt||"").trim();
   const placementConstraint=String(data.prompts?.placement_constraint||"").trim();
   if(channels.includes("reference")) {
-    lines.push("The reference image is the mandatory base canvas for the final output. Return an edited version of that same scene, keep its framing and background, and integrate the product at the placement shown; never return an isolated product on a new background.");
-    lines.push("Global-versus-detail rule: reference and placement control the full-frame composition, final product location and real scale on the subject. The *_detail images are magnified digital crops rendered from the IDENTICAL camera projection, lens, orientation and perspective rays; they are not alternate viewpoints. Use them only for fine geometry, curvature, openings, seams and material interfaces. Never infer a new camera, change perspective, enlarge the product or move it in the final full-frame image. The inpaint mask is only a permissible editing neighborhood for removing the old item and rebuilding nearby pixels; its white area is never a scale, shape or bounding-box reference. Geometry conflict priority: full-frame placement for scale/location, then shape_lock_detail or shape_lock > silhouette and edges > masks > depth and normal > rendered. Material ID images govern material regions only and must never alter geometry. At every material connection, preserve the exact boundary, neighboring-region identity, seam/contact relationship and occlusion order; use depth, edges and normal together to keep the front material in front and the rear material behind.");
+    lines.push("The reference image is the mandatory base canvas for the final output. Return an edited version of that same scene, keep its framing and background, and integrate the object at the placement shown; never return an isolated object on a new background.");
+    lines.push("Global-versus-detail rule: reference and placement control the full-frame composition, final object location and real scale in the scene. The *_detail images are magnified digital crops rendered from the IDENTICAL camera projection, lens, orientation and perspective rays; they are not alternate viewpoints. Use them only for fine geometry, curvature, openings, seams and material interfaces. Never infer a new camera, change perspective, enlarge the object or move it in the final full-frame image. The inpaint mask is only a permissible editing neighborhood for removing existing content and rebuilding nearby pixels; its white area is never a scale, shape or bounding-box reference. Geometry conflict priority: full-frame placement for scale/location, then shape_lock_detail or shape_lock > silhouette and edges > masks > depth and normal > rendered. Material ID images govern material regions only and must never alter geometry. At every material connection, preserve the exact boundary, neighboring-region identity, seam/contact relationship and occlusion order; use depth, edges and normal together to keep the front material in front and the rear material behind.");
   } else {
     lines.push("STANDARD RHINO SCENE MODE: use the complete Rhino camera view and the original scene-control behavior. Preserve the exact full-frame camera, composition, object count, silhouettes, openings, overlaps and relative scale shown by shape_lock and rendered. Use depth, edges, silhouette, normal and mask only as coordinated geometry evidence. Use material_id only to assign the requested materials to its flat-color regions. Do not apply any Wallpaper placement, reference-photo, inpaint, scale_lock or detail-crop rule in this mode.");
   }
   if(placementConstraint)lines.push(placementConstraint);
   if(materials)lines.push("Material mapping for the material_id image:\n"+materials);
   if(userInstruction)lines.push("Rhino user instruction — follow this requested edit exactly:\n"+userInstruction);
-  if(channels.includes("scale_lock"))lines.push("FINAL VALIDATION BEFORE OUTPUT: inspect the completed image and remove every technical overlay originating from scale_lock. The finished photograph may contain the real product only, with zero bounding box, crosshair, guide line, measurement mark or colored annotation. Compare every pixel outside the product edit region against reference and restore its original brightness, contrast, tonal range and color exactly.");
+  if(channels.includes("scale_lock"))lines.push("FINAL VALIDATION BEFORE OUTPUT: inspect the completed image and remove every technical overlay originating from scale_lock. The finished photograph may contain the real object only, with zero bounding box, crosshair, guide line, measurement mark or colored annotation. Compare every pixel outside the object edit region against reference and restore its original brightness, contrast, tonal range and color exactly.");
   return ROLE_START+"\n"+lines.join("\n")+"\n"+ROLE_END;
 }
 
@@ -175,7 +175,7 @@ export async function insertInputGroup(graph, data, createNode, origin=[0,0]) {
 export async function bindBatch(graph, batch, data, createNode) {
   const channels=channelsFor(data);
   const max=batch.comfyDynamic?.autogrow?.images?.max ?? 50;
-  if(channels.length>max)throw new Error(`本批有 ${channels.length} 张图，Batch 节点最多支持 ${max} 张；未截断图片。`);
+  if(channels.length>max)throw new Error(`This batch has ${channels.length} images but the Batch node accepts at most ${max}. No images were dropped.`);
   const reusable=(batch.inputs||[]).filter(i=>i.type==="IMAGE"&&i.link!=null).map(i=>linkAt(graph,i.link)).filter(Boolean).map(l=>graph.getNodeById(l.origin_id)).filter(n=>placeholder(n)&&!n.properties?.rhino_ai_channel&&(n.outputs?.[0]?.links||[]).length===1);
   const previous=(batch.inputs || []).map((input,index)=>({input,index})).filter(x=>x.input.type==="IMAGE").reverse();
   // Comfy's autogrow compacts slots on the NEXT animation frame. Reconnecting
@@ -207,7 +207,7 @@ export async function bindBatch(graph, batch, data, createNode) {
     if(loader.type==="LoadImage"&&loader.properties?.rhino_ai_batch===String(batch.id)&&EXCLUDED.has(loader.properties.rhino_ai_channel)&&!(loader.outputs||[]).some(o=>o.links?.length))graph.remove(loader);
   }
   batch.properties={...batch.properties,rhino_ai_live:true,rhino_ai_channels:channels};
-  if(!batchConnected(graph,batch,data))throw new Error("Batch 接线尚未完整，下一次同步会重试。");
+  if(!batchConnected(graph,batch,data))throw new Error("Batch wiring is incomplete. The next sync retries.");
   return channels;
 }
 
@@ -235,7 +235,7 @@ export async function updateGraph(graph, data, createNode, setImage) {
     const channel=node.properties?.rhino_ai_channel || match?.[1]?.toLowerCase();
     if(node.type!=="LoadImage"||!channel||EXCLUDED.has(channel))continue;
     const widget=node.widgets?.find(w=>w.name==="image");if(!widget)continue;
-    const path=data.images[channel] || ""; // Never leave a stale product reference on a missing channel.
+    const path=data.images[channel] || ""; // Never leave a stale object reference on a missing channel.
     if(widget.value===path && node.properties?.rhino_ai_revision===data.revision)continue;
     // Follow LoadImage's upload widget path so Vue's value validation and
     // output store both see the image, instead of painting a preview only.

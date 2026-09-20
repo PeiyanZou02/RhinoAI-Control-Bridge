@@ -12,10 +12,10 @@
 - 导出 Rendered、Shape Lock、Depth、Normal、Edges、Silhouette、Mask、Base Color、Object ID 和 Material ID。
 - Material ID 严格按照 Rhino 图层区分；需要分开的材质部件应放在不同图层。
 - 图层颜色可映射为目标材质，并同步简短的 `#HEX = 目标材质`。
-- 支持 Rhino Wallpaper 人物、手部和颈部参考图。
+- 支持把 Rhino Wallpaper 作为背景照片，将 Rhino 对象融合进场地、街景、室内或人像等任意底图。
 - 自动匹配 Portrait 或 Landscape Wallpaper 的原图比例，裁掉 Rhino 视口留白，同时保持相机位置、镜头和 Perspective 光线一致。
 - 导出 Placement、Scale Lock、Product Mask、Inpaint Mask 和可选遮挡蒙版。
-- 产品在全画幅中很小时，额外生成同一相机透视下的高清局部几何控制图。
+- 对象在全画幅中很小时，额外生成同一相机透视下的高清局部几何控制图。
 - 针对 Nano Banana 多图输入自动限制为不超过 14 张。
 - 保留用户在 ComfyUI 中自己填写的 Prompt。
 - 所有图片上传成功后才切换到新批次，避免半套输入。
@@ -59,12 +59,14 @@
 
 ## 日常使用
 
+插件面板为英文界面，下文中的粗体英文即面板上的按钮和选项名称。
+
 1. 启动 ComfyUI，打开包含 Batch Images 并连接生图模型的工作流。
 2. 在 Rhino 中打开模型并激活要导出的视口。
 3. 输入 `RhinoAI` 打开插件。
 4. 检查图层与目标材质表。不同 Material ID 的部件放入不同 Rhino 图层。
-5. 在“同步”页的 **目标工作流** 下拉框中选择要更新的 ComfyUI 文件，或保持“跟随 ComfyUI 当前窗口”。
-6. 在 Rhino 中点击“更新到 ComfyUI”。如果选择了目标文件，ComfyUI 会自动切到该文件再更新。
+5. 在 **Sync** 页的 **Target workflow** 下拉框中选择要更新的 ComfyUI 文件，或保持 **Follow the current ComfyUI window**。
+6. 在 Rhino 中点击 **Update to ComfyUI**。如果选择了目标文件，ComfyUI 会自动切到该文件再更新。
 7. 在 ComfyUI 中填写或修改自己的 Prompt。
 8. 由你手动点击 **Run**。
 
@@ -83,19 +85,19 @@
 
 工作流中已有多个 Batch Images 时，先选中要接入的那一个，再点击 Rhino 按钮。
 
-更换产品、视角、选择或材质后不会自动生成。再次点击“更新到 ComfyUI”即可发布新的输入图片。
+更换模型、视角、选择或材质后不会自动生成。再次点击“更新到 ComfyUI”即可发布新的输入图片。
 
 普通场景模式保持原来的 9 张控制图，并默认开启“普通场景固定旧版宽屏比例（1024 × 589）”。调整 Rhino 窗口、打开侧边栏或移动插件窗口都不会再把输出变成正方形；插件会对所有控制图使用同一个相机子视锥，Perspective 保持一致。只有开启 Wallpaper 产品佩戴模式时，才会使用参考底图、placement、scale-lock、局部放大和 inpaint 规则。
 
-## Wallpaper 产品佩戴
+## 背景图融合（Background blend）
 
-1. 使用 Rhino 的 `Wallpaper` 命令，把人物、手部或颈部参考照片放入当前视口。
-2. 移动产品并调整相机，使 CAD 产品对准实际佩戴位置和透视。
-3. 选中产品并开启仅导出选中对象。
-4. 开启 Wallpaper 产品佩戴模式，填写佩戴关系要求。
+1. 使用 Rhino 的 `Wallpaper` 命令，把背景照片（场地、街景、室内或人像等）放入当前视口。
+2. 移动 Rhino 对象并调整相机，使其对准照片中的目标位置和透视。
+3. 选中要融合的对象，并开启 **Export selected objects only**。
+4. 在 **Background blend** 页开启 **Blend into the Wallpaper background**，填写融合要求。
 5. 导出并更新到 ComfyUI。
 
-全画幅 `reference` 和 `placement` 决定最终构图、位置与尺度。只有 `reference` 可以决定最终画面的彩色或黑白模式、曝光、对比度、明暗层次、肤色和背景，其他技术控制图不能让结果染色或变灰。`scale_lock.png` 在完整画幅中标记产品的精确轮廓、外接框和中心；其底图现在保持 reference 的原始明暗，其中紫色轮廓、矩形框和十字仅是不可见的测量信息，绝不能出现在最终成图中。自动提示词会在图片职责说明的开头和结尾重复外观锁定与清理要求。放大的 `*_detail` 图片只提供造型与材质细节，不能改变最终产品的大小和位置。
+全画幅 `reference` 和 `placement` 决定最终构图、位置与尺度。只有 `reference` 可以决定最终画面的彩色或黑白模式、曝光、对比度、明暗层次、色彩和背景，其他技术控制图不能让结果染色或变灰。`scale_lock.png` 在完整画幅中标记对象的精确轮廓、外接框和中心；其底图现在保持 reference 的原始明暗，其中紫色轮廓、矩形框和十字仅是不可见的测量信息，绝不能出现在最终成图中。自动提示词会在图片职责说明的开头和结尾重复外观锁定与清理要求。放大的 `*_detail` 图片只提供造型与材质细节，不能改变最终产品的大小和位置。
 
 保持“按 Wallpaper 原图比例输出”开启时，Portrait 参考图会直接生成竖幅结果。插件会先以足够的中间分辨率捕获完整 Rhino 视口，再裁出对应的相机子视锥，并把同一竖幅画布用于 reference、placement、rendered、全部几何控制图及蒙版；不会拉伸或旋转照片。
 
@@ -116,11 +118,11 @@
 | `material_id.png` | 严格按照 Rhino 图层分配的材质区域 |
 | `basecolor.png` | 不含灯光的平面材质底色 |
 | `reference.png` | 完整 Wallpaper 参考底图 |
-| `placement.png` | 产品在参考图上的全画幅位置 |
+| `placement.png` | 对象在参考图上的全画幅位置 |
 | `scale_lock.png` | 仅用于全画幅尺度与位置测量，不作为最终外观 |
-| `product_mask.png` | 产品在完整画幅中的精确轮廓 |
+| `object_mask.png` | 对象在完整画幅中的精确轮廓 |
 | `inpaint_mask.png` | 平滑的允许编辑邻域 |
-| `tryon.json` | 位置边界、相机、图片职责和约束信息 |
+| `blend.json` | 位置边界、相机、图片职责和约束信息 |
 
 同一次导出的基础控制图使用完全相同的相机和透视。Portrait 输出和局部细节图都使用从原视角裁切出的相机子视锥，不改变相机位置或镜头，因此 Perspective 保持一致。
 
