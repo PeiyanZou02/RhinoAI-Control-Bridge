@@ -136,7 +136,8 @@ Add up to four real photographs under **Style reference photos** to make the res
 - Pick photos of a similar subject and lighting to what you want, such as an architectural photograph for a building or a studio product shot for an object. One or two consistent photos work better than four different looks.
 - Photos are copied into each export folder as `style_reference_N.jpg`, turned upright and scaled to at most 1536 px, so the originals are untouched and the request stays small.
 - JPG, PNG and BMP are accepted. A missing file is reported in the log and skipped.
-- With the ComfyUI engine they are uploaded too and bind to `LoadImage` nodes titled `RHINO:style_reference_1` and so on.
+- They also work in ComfyUI workflows. With **Send the style reference photos** ticked on the **Sync** page, **Update to ComfyUI** uploads them behind the control images, adds them to the Batch Images node as `RHINO:style_reference_1` and so on, and writes the same style-only rule into the managed prompt. A batch that already holds 14 images leaves them out. This needs sync extension version 24: run `install-comfy-extension.ps1` again, restart ComfyUI and press **F5**.
+- With the ComfyUI engine of AI render they are uploaded too and bind to `LoadImage` nodes with those titles.
 - In Background blend the Wallpaper photograph still controls the look of the whole frame. Style photos then affect only the realism of the inserted object.
 
 The exact prompt sent for each view is kept as `ai_prompt.txt` in that view's export folder. Export options such as the longest edge, the locked widescreen frame, selected objects only and Background blend apply to every view. Background blend always sends its own reference, placement and mask images.

@@ -29,7 +29,7 @@ namespace RhinoAI
                     return Reply(new JObject{["name"]="server_"+filename,["subfolder"]=folder}.ToString());
                 }
                 if(request.Method==HttpMethod.Get&&path=="/userdata")return Reply("[{\"path\":\"old.json\",\"modified\":1},{\"path\":\"sub\\\\new.json\",\"modified\":9},{\"path\":\"notes.txt\",\"modified\":5}]");
-                if(request.Method==HttpMethod.Get&&path=="/userdata/rhino_ai_frontend_status.json")return Reply("{\"version\":22,\"state\":\"bound\",\"active\":\"CHOGA.json\",\"images\":9}");
+                if(request.Method==HttpMethod.Get&&path=="/userdata/rhino_ai_frontend_status.json")return Reply("{\"version\":24,\"state\":\"bound\",\"active\":\"CHOGA.json\",\"images\":9}");
                 if(request.Method==HttpMethod.Post&&path=="/userdata/rhino_ai_latest.json"){Published=JObject.Parse(await request.Content.ReadAsStringAsync());return Reply("{}");}
                 throw new Exception("Forbidden/unexpected request: "+request.Method+" "+path);
             }
@@ -74,6 +74,15 @@ namespace RhinoAI
             var many=Enumerable.Range(0,20).ToDictionary(i=>i<12?new[]{"reference","placement","placement_detail","rendered_detail","shape_lock_detail","material_id_detail","normal_detail","edges_detail","depth_detail","object_mask","inpaint_mask","occlusion_mask"}[i]:"extra_"+i,i=>png);
             var limited=ComfyClient.SelectForBatch(many,new Config{ProductMode=true,DetailPriority=true});
             check(limited.Count==10&&limited.ContainsKey("shape_lock_detail")&&!limited.ContainsKey("placement_detail")&&!limited.ContainsKey("rendered_detail")&&!limited.Keys.Any(x=>x.StartsWith("extra_")),"detail-priority profile excludes enlarged photo composites and stays below 14");
+            string photo=Path.Combine(root,"style.jpg");using(var bmp=new System.Drawing.Bitmap(8,8))bmp.Save(photo,System.Drawing.Imaging.ImageFormat.Jpeg);
+            var styledExport=new ExportResult{Directory=root,Files=new Dictionary<string,string>{{"depth",png}},Prompt="material"};
+            StyleReferences.Prepare(styledExport,new Config{AiReferences=new List<string>{photo}},null);var styled=new Recorder();
+            Task.Run(async()=>{using(var client=new ComfyClient("http://localhost:8000",styled))await client.Send(styledExport,new Config{Workflow=""});}).GetAwaiter().GetResult();
+            check(((string)styled.Published["images"]["style_reference_1"]).EndsWith("style_reference_1.jpg")&&styled.Published["images"].Children().Last().Path.EndsWith("style_reference_1"),"style reference photos are uploaded behind the controls and published");
+            check(styled.Calls.All(x=>!x.Contains("/prompt")&&!x.Contains("/queue")),"style references do not start a generation");
+            var crowded=Enumerable.Range(0,14).ToDictionary(i=>new[]{"reference","placement","scale_lock","shape_lock","rendered","depth","edges","silhouette","normal","mask","material_id","object_mask","inpaint_mask","occlusion_mask"}[i],i=>png);crowded["style_reference_1"]=photo;
+            check(!ComfyClient.SelectForBatch(crowded,new Config{ProductMode=true,DetailPriority=false}).ContainsKey("style_reference_1"),"a full 14-image batch leaves the style photos out instead of failing");
+            check(ComfyClient.DescribeStatus(new JObject{["version"]=23,["state"]="bound"},"").Contains("outdated"),"extension without style reference support is reported as outdated");
             return count+" sync checks passed";
         }
     }

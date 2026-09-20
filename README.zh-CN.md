@@ -136,7 +136,8 @@ ComfyUI 的生图节点本质上是对厂商 API 的封装。只要有自己的 
 - 选择与目标效果题材、光线接近的照片，例如建筑用建筑摄影，产品用棚拍产品图。一两张风格一致的照片比四张不同风格的效果好。
 - 照片会复制到每次导出目录，命名为 `style_reference_N.jpg`，自动转正并缩小到最长边 1536 px；原图不会被改动，请求体积也保持较小。
 - 支持 JPG、PNG、BMP。找不到的文件会在日志里提示并跳过。
-- 使用 ComfyUI 引擎时同样会上传，并绑定到标题为 `RHINO:style_reference_1` 等的 `LoadImage` 节点。
+- 在 ComfyUI 工作流里同样可用。**Sync** 页面勾选 **Send the style reference photos** 后，**Update to ComfyUI** 会把它们排在控制图后面一起上传，以 `RHINO:style_reference_1` 等节点接入 Batch Images，并在托管提示词里写入同一条“只借用风格”的规则。如果一批已经有 14 张图，参考图会被省略。需要同步扩展版本 24：重新运行 `install-comfy-extension.ps1`，重启 ComfyUI 并按 **F5**。
+- AI render 使用 ComfyUI 引擎时同样会上传，并绑定到这些标题的 `LoadImage` 节点。
 - 在背景图融合模式下，Wallpaper 照片仍然决定整幅画面的观感，风格参考图只影响插入物体材质的真实感。
 
 每个视图实际发送的提示词保存在该视图导出目录的 `ai_prompt.txt`。最长边、锁定宽屏画幅、仅导出选中对象、背景图融合等导出选项对每个视图同样生效。背景图融合模式固定发送自己的参考图、定位图和蒙版。
