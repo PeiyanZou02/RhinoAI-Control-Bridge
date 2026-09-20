@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.27.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.28.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -58,6 +58,7 @@ namespace RhinoAI
         readonly ComboBox engine=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},model=new ComboBox(),aspect=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},resolution=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly TextBox apiKey=new TextBox{UseSystemPasswordChar=true},apiUrl=new TextBox(),aiPrompt=new TextBox(),aiOutput=new TextBox();
         readonly CheckedListBox views=new CheckedListBox(),channels=new CheckedListBox();
+        readonly ListBox references=new ListBox{BorderStyle=BorderStyle.None,IntegralHeight=false,SelectionMode=SelectionMode.MultiExtended,HorizontalScrollbar=true};
         FlatButton renderButton,cancelButton;
         CancellationTokenSource cancel;
         AiProvider shown;
@@ -138,6 +139,10 @@ namespace RhinoAI
             Row(ai,"Control images to send",new Field(channels,72),"Fewer images are faster and cheaper. Background blend always sends its own reference, placement and mask set.");
             aiPrompt.Multiline=true;aiPrompt.ScrollBars=ScrollBars.Vertical;aiPrompt.Text=config.AiPrompt;aiOutput.Text=config.AiOutput;
             Row(ai,"Prompt",new Field(aiPrompt,96),"The look you want. Image roles and the layer material mapping are added automatically.");
+            Row(ai,"Style reference photos (optional)",new Field(references,76),"Real photographs whose look you want: lighting, color grading, material realism and atmosphere. The engine borrows only the style. Geometry and camera still come from Rhino. Up to "+StyleReferences.Max+" images, sent with every view.");
+            var referenceActions=new FlowLayoutPanel{AutoSize=true,Margin=new Padding(0,0,0,Theme.S(8))};
+            referenceActions.Controls.Add(Button("Add photos",AddReferences));referenceActions.Controls.Add(Button("Remove",delegate{foreach(var item in references.SelectedItems.Cast<object>().ToList())references.Items.Remove(item);},ButtonKind.Ghost));referenceActions.Controls.Add(Button("Clear",delegate{references.Items.Clear();},ButtonKind.Ghost));Add(ai,referenceActions);
+            foreach(var path in config.AiReferences??new List<string>())references.Items.Add(path);
             Row(ai,"Render folder",Browse(aiOutput,false,true),"Finished images are saved here, named after their view.");
             
             renderButton=Button("Render ticked views",async delegate{await RenderViews();},ButtonKind.Primary);cancelButton=Button("Cancel",delegate{if(cancel!=null)cancel.Cancel();});cancelButton.Enabled=false;
@@ -266,7 +271,16 @@ namespace RhinoAI
         {
             layers.EndEdit();foreach(DataGridViewRow row in layers.Rows){var l=(LayerRule)row.Tag;l.Material=Convert.ToString(row.Cells[2].Value).Trim();if(string.IsNullOrWhiteSpace(l.Material))throw new ArgumentException("Enter a target material for layer: "+l.Name);}
             config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.TargetWorkflow=SelectedTarget();config.LongEdge=(int)edge.Value;config.LockSceneAspect=sceneAspect.Checked;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.MatchWallpaperAspect=wallpaperAspect.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;
-            StoreEngine();config.AiEngine=shown.Id;config.AiPrompt=aiPrompt.Text;config.AiOutput=aiOutput.Text.Trim();config.AiChannels=channels.CheckedItems.Cast<string>().ToList();config.AiViews=TickedViews();
+            StoreEngine();config.AiEngine=shown.Id;config.AiPrompt=aiPrompt.Text;config.AiOutput=aiOutput.Text.Trim();config.AiChannels=channels.CheckedItems.Cast<string>().ToList();config.AiViews=TickedViews();config.AiReferences=references.Items.Cast<string>().ToList();
+        }
+        void AddReferences()
+        {
+            using(var dlg=new OpenFileDialog{Filter="Photos|*.jpg;*.jpeg;*.png;*.bmp",Multiselect=true,Title="Style reference photos"})
+            {
+                if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+                foreach(var path in dlg.FileNames)if(!references.Items.Contains(path)&&references.Items.Count<StyleReferences.Max)references.Items.Add(path);
+                if(dlg.FileNames.Any(path=>!references.Items.Contains(path)))Log("At most "+StyleReferences.Max+" style reference photos are used.");
+            }
         }
         List<string> TickedViews(){return views.CheckedItems.Cast<string>().ToList();}
         void FillViews(List<string> ticked)
@@ -332,6 +346,7 @@ namespace RhinoAI
                         var snapshot=Exporter.Capture(doc,config);
                         last=await Task.Run(()=>Exporter.Render(snapshot,config,p=>{if(!IsDisposed)BeginInvoke((Action)(()=>progress.Value=Math.Min(99,(step*100+p/2)/names.Count)));}));
                         token.ThrowIfCancellationRequested();List<AiImage> images;
+                        var skipped=new List<string>();StyleReferences.Prepare(last,config,skipped);foreach(var note in skipped)Log(note);
                         if(api)
                         {
                             var notes=new List<string>();var inputs=PromptGuide.Select(last,config,shown.MaxImages,notes);foreach(var note in notes)Log(note);

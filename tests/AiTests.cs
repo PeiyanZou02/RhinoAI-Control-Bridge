@@ -96,6 +96,22 @@ namespace RhinoAI
             check(!PromptGuide.Build(new List<string>{"rendered"},export,config).Contains("#FF0000"),"material mapping is left out when material_id is not sent");
             var notes=new List<string>();check(PromptGuide.Select(export,new Config{AiChannels=PromptGuide.SceneChannels.ToList()},3,notes).Count==3&&notes.Count==1,"engine image limit is applied and reported");
             check(PromptGuide.Select(export,new Config(),14,null).Count==PromptGuide.DefaultChannels.Length,"default control images used when none were saved");
+            string photo=Path.Combine(root,"style photo.jpg");
+            using(var big=new System.Drawing.Bitmap(3000,2000))big.Save(photo,System.Drawing.Imaging.ImageFormat.Jpeg);
+            var styled=new ExportResult{Directory=root,Files=PromptGuide.SceneChannels.ToDictionary(c=>c,c=>png),Prompt="#FF0000 = oak"};var styleNotes=new List<string>();
+            var styleConfig=new Config{AiChannels=PromptGuide.SceneChannels.ToList(),AiReferences=new List<string>{photo,Path.Combine(root,"missing.jpg")}};
+            StyleReferences.Prepare(styled,styleConfig,styleNotes);
+            check(styled.Files.ContainsKey("style_reference_1")&&!styled.Files.ContainsKey("style_reference_2")&&styleNotes.Count==1&&styleNotes[0].Contains("missing.jpg"),"style photos are copied into the export and a missing one is reported");
+            using(var copy=new System.Drawing.Bitmap(styled.Files["style_reference_1"]))check(copy.Width==1536&&copy.Height==1024,"large style photos are scaled down before sending");
+            var withStyle=PromptGuide.Select(styled,styleConfig,4,null);
+            check(withStyle.Count==4&&withStyle.Last().Key=="style_reference_1","a style reference keeps its place when the engine limit is tight");
+            string styleGuide=PromptGuide.Build(withStyle.Select(x=>x.Key).ToList(),styled,styleConfig);
+            check(styleGuide.Contains("Image 4 (style_reference_1): STYLE REFERENCE ONLY")&&styleGuide.Contains("STYLE TRANSFER RULE")&&styleGuide.Contains("Never copy their objects"),"prompt tells the engine to borrow the look and nothing else");
+            check(!guide.Contains("STYLE TRANSFER RULE"),"no style rule without style photos");
+            var styleVendor=new Vendor{Reply=google.Reply};
+            Wait(async()=>{using(var client=new AiClient(styleVendor))return await client.Generate(AiProviders.Find("google"),new ProviderSettings(),"k","p",withStyle,1024,589,none);});
+            check(JObject.Parse(styleVendor.Bodies[0]).SelectTokens("contents[0].parts[*].inlineData.mimeType").Select(x=>(string)x).SequenceEqual(new[]{"image/png","image/png","image/png","image/jpeg"}),"each image is sent with its real type");
+
             check(AiClient.NearestRatio(683,1024)=="2:3"&&AiClient.NearestRatio(1000,1000)=="1:1","nearest supported aspect ratio");
 
             string workflow=Path.Combine(root,"job.api.json");
