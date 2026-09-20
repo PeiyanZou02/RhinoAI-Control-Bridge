@@ -129,6 +129,16 @@ ComfyUI's image nodes are wrappers around vendor APIs. With your own API key, th
 6. Tick the control images to send, write the prompt and choose the **Render folder**.
 7. Click **Render ticked views**. Each view is restored in the active viewport, exported, sent with the prompt, image roles and layer material mapping, and saved as `<view name>_<time>.png`. Your original view is restored at the end. **Cancel** stops the batch and drops the request in progress. A view that fails is reported and the batch continues.
 
+### Style reference photos
+
+Add up to four real photographs under **Style reference photos** to make the result more photographic. They are sent with every view, after the control images, with an instruction to borrow only their look: light quality, exposure, color grading, material realism, atmosphere, depth of field and lens character. Geometry, camera and material regions still come only from the Rhino control images, so the photos never change your design.
+
+- Pick photos of a similar subject and lighting to what you want, such as an architectural photograph for a building or a studio product shot for an object. One or two consistent photos work better than four different looks.
+- Photos are copied into each export folder as `style_reference_N.jpg`, turned upright and scaled to at most 1536 px, so the originals are untouched and the request stays small.
+- JPG, PNG and BMP are accepted. A missing file is reported in the log and skipped.
+- With the ComfyUI engine they are uploaded too and bind to `LoadImage` nodes titled `RHINO:style_reference_1` and so on.
+- In Background blend the Wallpaper photograph still controls the look of the whole frame. Style photos then affect only the realism of the inserted object.
+
 The exact prompt sent for each view is kept as `ai_prompt.txt` in that view's export folder. Export options such as the longest edge, the locked widescreen frame, selected objects only and Background blend apply to every view. Background blend always sends its own reference, placement and mask images.
 
 For the ComfyUI engine, the API workflow can use `{{positive_prompt}}` for your prompt text and `{{full_prompt}}` for the prompt with image roles and material mapping, next to the existing `RHINO:<channel>` image loaders.

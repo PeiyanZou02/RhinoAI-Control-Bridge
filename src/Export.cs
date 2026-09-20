@@ -43,7 +43,7 @@ namespace RhinoAI
         public string AiEngine="google";
         public string AiOutput=Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),"RhinoAI Renders");
         public string AiPrompt="Photorealistic visualization, physically plausible materials, soft natural lighting, accurate scale, balanced exposure, fine surface detail. Preserve the supplied design.";
-        public List<string> AiChannels,AiViews;
+        public List<string> AiChannels,AiViews,AiReferences; // AiReferences: local photos whose look the render should borrow
         public Dictionary<string,ProviderSettings> AiProviders=new Dictionary<string,ProviderSettings>();
         public ProviderSettings Provider(string id){ProviderSettings found;if(!AiProviders.TryGetValue(id,out found)){found=new ProviderSettings();AiProviders[id]=found;}return found;}
         public static string Root {get{var location=typeof(Config).Assembly.Location;return !string.IsNullOrEmpty(location)?Path.GetDirectoryName(location):(System.Environment.GetEnvironmentVariable("RHINO_AI_HOME")??AppDomain.CurrentDomain.BaseDirectory);}}

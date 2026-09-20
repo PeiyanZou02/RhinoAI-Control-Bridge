@@ -133,7 +133,10 @@ namespace RhinoAI
                 images=SceneChannels.Where(c=>wanted.Contains(c)&&export.Files.ContainsKey(c)).Select(c=>new KeyValuePair<string,string>(c,export.Files[c])).ToList();
             }
             if(images.Count==0)throw new InvalidOperationException("Tick at least one control image to send.");
+            // Style references ride behind the control images and keep their place when the engine's limit is tight.
+            var styles=export.Files.Where(x=>x.Key.StartsWith(StyleReferences.Prefix)).OrderBy(x=>x.Key).ToList();max=Math.Max(1,max-styles.Count);
             if(images.Count>max){if(notes!=null)notes.Add("This engine accepts "+max+" images. Left out: "+string.Join(", ",images.Skip(max).Select(x=>x.Key))+".");images=images.Take(max).ToList();}
+            images.AddRange(styles);
             return images;
         }
         public static string Build(IList<string> channels,ExportResult export,Config config)
@@ -143,13 +146,15 @@ namespace RhinoAI
             lines.Add("Use the supplied input images according to the exact roles below.");
             if(channels.Contains("reference"))lines.Add("MANDATORY REFERENCE APPEARANCE LOCK: reference alone controls the complete frame's color or monochrome mode, white balance, exposure, brightness, contrast, tonal range, colors and background. Never average, blend or transfer appearance from scale_lock, placement, masks, depth, normals, edges, shape_lock or material_id; they are technical data only.");
             if(channels.Contains("scale_lock"))lines.Add("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual object.");
-            for(int i=0;i<channels.Count;i++){string role;lines.Add(Label(i,channels[i])+": "+(Roles.TryGetValue(channels[i],out role)?role:"additional visual reference; use only for the information visibly encoded in this image")+".");}
+            string styleRole="STYLE REFERENCE ONLY, never a geometry or composition reference; a real photograph chosen by the user for its look";
+            for(int i=0;i<channels.Count;i++){string role;if(channels[i].StartsWith(StyleReferences.Prefix)){lines.Add(Label(i,channels[i])+": "+styleRole+".");continue;}lines.Add(Label(i,channels[i])+": "+(Roles.TryGetValue(channels[i],out role)?role:"additional visual reference; use only for the information visibly encoded in this image")+".");}
             if(channels.Contains("reference"))
             {
                 lines.Add("The reference image is the mandatory base canvas for the final output. Return an edited version of that same scene, keep its framing and background, and integrate the object at the placement shown; never return an isolated object on a new background.");
                 lines.Add("Global-versus-detail rule: reference and placement control the full-frame composition, final object location and real scale in the scene. The *_detail images are magnified digital crops rendered from the IDENTICAL camera projection, lens, orientation and perspective rays; they are not alternate viewpoints. Use them only for fine geometry, curvature, openings, seams and material interfaces. Never infer a new camera, change perspective, enlarge the object or move it in the final full-frame image. The inpaint mask is only a permissible editing neighborhood; its white area is never a scale, shape or bounding-box reference. Geometry conflict priority: full-frame placement for scale/location, then shape_lock_detail or shape_lock > silhouette and edges > masks > depth and normal > rendered. Material ID images govern material regions only and must never alter geometry.");
             }
             else lines.Add("STANDARD RHINO SCENE MODE: preserve the exact full-frame camera, composition, object count, silhouettes, openings, overlaps and relative scale shown by the control images. Use depth, edges, silhouette, normal and mask only as coordinated geometry evidence. Use material_id only to assign the requested materials to its flat-color regions. The technical control images must never appear in the result.");
+            if(channels.Any(c=>c.StartsWith(StyleReferences.Prefix)))lines.Add("STYLE TRANSFER RULE: study the style_reference photographs and extract only their photographic qualities: light quality, direction and softness, exposure, dynamic range, white balance, color grading, contrast, material realism and surface imperfection, reflections, atmosphere, depth of field, lens character and film or sensor grain. Render the Rhino scene with those qualities so the result reads as a real photograph of the same kind, not a CG image. Never copy their objects, architecture, furniture, people, text, composition, framing or camera. Geometry, camera, object count and material regions come only from the Rhino control images, and the material mapping still decides what each region is made of."+(channels.Contains("reference")?" In this background blend the reference photograph still controls the appearance of the whole frame; use the style references only for the realism of the inserted object's materials.":""));
             if(!string.IsNullOrWhiteSpace(export.PlacementConstraint))lines.Add(export.PlacementConstraint.Trim());
             if(!string.IsNullOrWhiteSpace(export.Prompt)&&channels.Any(c=>c.StartsWith("material_id")))lines.Add("Material mapping for the material_id image:\n"+export.Prompt.Trim());
             string instruction=config.ProductMode?(config.WearInstructions??"").Trim():"";
@@ -157,6 +162,43 @@ namespace RhinoAI
             if(channels.Contains("scale_lock"))lines.Add("FINAL VALIDATION BEFORE OUTPUT: inspect the completed image and remove every technical overlay originating from scale_lock. Compare every pixel outside the object edit region against reference and restore its original brightness, contrast, tonal range and color exactly.");
             lines.Add("Return exactly one finished image with the same framing and aspect ratio as the inputs.");
             return string.Join("\n",lines);
+        }
+    }
+    // Copies the user's style photos into the export as bounded JPEGs, so every engine gets a small, upright image.
+    public static class StyleReferences
+    {
+        public const string Prefix="style_reference_";
+        public const int Max=4,LongEdge=1536;
+        public static string Mime(string path){string e=Path.GetExtension(path).ToLowerInvariant();return e==".jpg"||e==".jpeg"?"image/jpeg":e==".webp"?"image/webp":"image/png";}
+        public static void Prepare(ExportResult export,Config config,List<string> notes)
+        {
+            int index=0;
+            foreach(var source in (config.AiReferences??new List<string>()).Where(x=>!string.IsNullOrWhiteSpace(x)).Take(Max))
+            {
+                try
+                {
+                    using(var image=System.Drawing.Image.FromFile(source))
+                    {
+                        // Phone photos carry their rotation in EXIF.
+                        if(image.PropertyIdList.Contains(0x0112))
+                        {
+                            int o=BitConverter.ToUInt16(image.GetPropertyItem(0x0112).Value,0);
+                            var flip=o==3?System.Drawing.RotateFlipType.Rotate180FlipNone:o==6?System.Drawing.RotateFlipType.Rotate90FlipNone:o==8?System.Drawing.RotateFlipType.Rotate270FlipNone:System.Drawing.RotateFlipType.RotateNoneFlipNone;
+                            if(flip!=System.Drawing.RotateFlipType.RotateNoneFlipNone)image.RotateFlip(flip);
+                        }
+                        double scale=Math.Min(1,LongEdge/(double)Math.Max(image.Width,image.Height));int w=Math.Max(1,(int)Math.Round(image.Width*scale)),h=Math.Max(1,(int)Math.Round(image.Height*scale));
+                        string key=Prefix+(++index),path=Path.Combine(export.Directory,key+".jpg");
+                        using(var copy=new System.Drawing.Bitmap(w,h,System.Drawing.Imaging.PixelFormat.Format24bppRgb))
+                        {
+                            using(var g=System.Drawing.Graphics.FromImage(copy)){g.Clear(System.Drawing.Color.White);g.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;g.DrawImage(image,0,0,w,h);}
+                            var codec=System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders().First(c=>c.FormatID==System.Drawing.Imaging.ImageFormat.Jpeg.Guid);
+                            using(var options=new System.Drawing.Imaging.EncoderParameters(1)){options.Param[0]=new System.Drawing.Imaging.EncoderParameter(System.Drawing.Imaging.Encoder.Quality,92L);copy.Save(path,codec,options);}
+                        }
+                        export.Files[key]=path;
+                    }
+                }
+                catch(Exception e){if(notes!=null)notes.Add("Style reference skipped: "+source+" ("+(e is FileNotFoundException||e is OutOfMemoryException?"missing or not a JPG, PNG or BMP image":e.Message)+")");}
+            }
         }
     }
     // Direct vendor calls. The key goes only to the address shown in the panel, over the request header.
@@ -187,7 +229,7 @@ namespace RhinoAI
             if(provider.Id=="google")
             {
                 var parts=new JArray{new JObject{["text"]=prompt}};
-                for(int i=0;i<images.Count;i++){parts.Add(new JObject{["text"]=PromptGuide.Label(i,images[i].Key)+":"});parts.Add(new JObject{["inlineData"]=new JObject{["mimeType"]="image/png",["data"]=Convert.ToBase64String(File.ReadAllBytes(images[i].Value))}});}
+                for(int i=0;i<images.Count;i++){parts.Add(new JObject{["text"]=PromptGuide.Label(i,images[i].Key)+":"});parts.Add(new JObject{["inlineData"]=new JObject{["mimeType"]=StyleReferences.Mime(images[i].Value),["data"]=Convert.ToBase64String(File.ReadAllBytes(images[i].Value))}});}
                 var image=new JObject{["aspectRatio"]=aspect=="auto"?NearestRatio(width,height):aspect};
                 // Only the Gemini 3 image models take an output size.
                 if(model.ToLowerInvariant().Contains("gemini-3"))image["imageSize"]=resolution;
@@ -200,13 +242,13 @@ namespace RhinoAI
                 var form=new MultipartFormDataContent();form.Add(new StringContent(model),"model");form.Add(new StringContent(prompt),"prompt");
                 form.Add(new StringContent(aspect=="1:1"?"1024x1024":aspect=="3:2"?"1536x1024":aspect=="2:3"?"1024x1536":width>height*1.15?"1536x1024":height>width*1.15?"1024x1536":"1024x1024"),"size");
                 if(resolution!="auto")form.Add(new StringContent(resolution),"quality");
-                foreach(var item in images){var bytes=new ByteArrayContent(File.ReadAllBytes(item.Value));bytes.Headers.ContentType=new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");form.Add(bytes,"image[]",item.Key+".png");}
+                foreach(var item in images){var bytes=new ByteArrayContent(File.ReadAllBytes(item.Value));bytes.Headers.ContentType=new System.Net.Http.Headers.MediaTypeHeaderValue(StyleReferences.Mime(item.Value));form.Add(bytes,"image[]",item.Key+Path.GetExtension(item.Value).ToLowerInvariant());}
                 request=new HttpRequestMessage(HttpMethod.Post,root+"/images/edits"){Content=form};
                 request.Headers.Authorization=new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",key.Trim());
             }
             else if(provider.Id=="doubao")
             {
-                var body=new JObject{["model"]=model,["prompt"]=prompt,["image"]=new JArray(images.Select(x=>"data:image/png;base64,"+Convert.ToBase64String(File.ReadAllBytes(x.Value)))),["size"]=AiProviders.PixelSize(AiProviders.Resolutions(provider,model).Contains(resolution)?resolution:"2K",aspect=="auto"?width/(double)Math.Max(1,height):double.Parse(aspect.Split(':')[0])/double.Parse(aspect.Split(':')[1])),["sequential_image_generation"]="disabled",["response_format"]="b64_json",["watermark"]=false};
+                var body=new JObject{["model"]=model,["prompt"]=prompt,["image"]=new JArray(images.Select(x=>"data:"+StyleReferences.Mime(x.Value)+";base64,"+Convert.ToBase64String(File.ReadAllBytes(x.Value)))),["size"]=AiProviders.PixelSize(AiProviders.Resolutions(provider,model).Contains(resolution)?resolution:"2K",aspect=="auto"?width/(double)Math.Max(1,height):double.Parse(aspect.Split(':')[0])/double.Parse(aspect.Split(':')[1])),["sequential_image_generation"]="disabled",["response_format"]="b64_json",["watermark"]=false};
                 request=new HttpRequestMessage(HttpMethod.Post,root+"/images/generations"){Content=new StringContent(body.ToString(Formatting.None),Encoding.UTF8,"application/json")};
                 request.Headers.Authorization=new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",key.Trim());
             }

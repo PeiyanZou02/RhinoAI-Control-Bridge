@@ -147,6 +147,8 @@ namespace RhinoAI
         {
             if(string.IsNullOrWhiteSpace(config.Workflow))throw new InvalidOperationException("The ComfyUI engine needs an API workflow. Choose one on the Export settings page.");
             await Check();var template=JObject.Parse(File.ReadAllText(config.Workflow,Encoding.UTF8));var selected=SelectForBatch(export.Files,config);
+            // Style references bind to LoadImage nodes titled RHINO:style_reference_1 and so on.
+            foreach(var style in export.Files.Where(x=>x.Key.StartsWith(StyleReferences.Prefix)).OrderBy(x=>x.Key))if(selected.Count<14)selected[style.Key]=style.Value;
             string positive=(config.AiPrompt??"").Trim(),full=PromptGuide.Build(selected.Keys.ToList(),export,config);
             Bind(template,selected.ToDictionary(k=>k.Key,k=>Path.GetFileName(k.Value)),export,positive,full);
             var uploaded=new Dictionary<string,string>();string folder="rhino_ai/"+Path.GetFileName(export.Directory);
