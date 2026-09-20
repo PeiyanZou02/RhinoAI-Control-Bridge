@@ -34,8 +34,8 @@ foreach ($ref in $refs) { $metadata.Add([Microsoft.CodeAnalysis.MetadataReferenc
 $syntax = [System.Collections.Generic.List[Microsoft.CodeAnalysis.SyntaxTree]]::new()
 foreach ($source in $sources) { $syntax.Add([Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([IO.File]::ReadAllText($source))) }
 $options = [Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions]::new([Microsoft.CodeAnalysis.OutputKind]::DynamicallyLinkedLibrary).WithOptimizationLevel([Microsoft.CodeAnalysis.OptimizationLevel]::Release)
-$assemblyName = if ($Tests) { 'RhinoAI.Tests' } else { 'RhinoAI' }
-$outputFile = if ($Tests) { Join-Path $root 'dist\RhinoAI.Tests.dll' } else { Join-Path $root 'dist\RhinoAI.rhp' }
+$assemblyName = if ($Tests) { 'Rhino2Comfy.Tests' } else { 'Rhino2Comfy' }
+$outputFile = if ($Tests) { Join-Path $root 'dist\Rhino2Comfy.Tests.dll' } else { Join-Path $root 'dist\Rhino2Comfy.rhp' }
 $compilation = [Microsoft.CodeAnalysis.CSharp.CSharpCompilation]::Create($assemblyName, $syntax, $metadata, $options)
 $stream = [IO.MemoryStream]::new()
 try { $result = $compilation.Emit($stream); $bytes = $stream.ToArray() } finally { $stream.Dispose() }

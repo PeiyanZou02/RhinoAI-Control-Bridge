@@ -1,7 +1,7 @@
 exports/
 test-output/
 dist/*
-!dist/RhinoAI.rhp
+!dist/Rhino2Comfy.rhp
 *.pdb
 .vs/
 bin/

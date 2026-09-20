@@ -34,7 +34,7 @@ The plug-in defaults to `http://127.0.0.1:8000`. Change the address in the Rhino
 
 ### Rhino plug-in
 
-1. Download `dist/RhinoAI.rhp` or build it from source.
+1. Download `dist/Rhino2Comfy.rhp` or build it from source.
 2. Drag the `.rhp` file into Rhino 8, or run `PlugInManager`, choose **Install**, and select the file.
 3. Restart Rhino if requested.
 4. Run the Rhino command `Rhino2Comfy`.
@@ -147,7 +147,7 @@ Material IDs follow the Rhino layer display colors exactly, on a black backgroun
 node .\tests\sync-core.test.mjs
 ```
 
-The build uses the Rhino 8 `RhinoCommon.dll` already installed on the machine. PowerShell 7 supplies its bundled Roslyn compiler; Windows PowerShell 5.1 falls back to the Roslyn copy shipped with Rhino 8, so PowerShell 7 is optional. The output is `dist/RhinoAI.rhp`.
+The build uses the Rhino 8 `RhinoCommon.dll` already installed on the machine. PowerShell 7 supplies its bundled Roslyn compiler; Windows PowerShell 5.1 falls back to the Roslyn copy shipped with Rhino 8, so PowerShell 7 is optional. The output is `dist/Rhino2Comfy.rhp`.
 
 The synchronization tests verify that the bridge uploads and publishes inputs without calling ComfyUI's prompt or queue endpoints.
 
