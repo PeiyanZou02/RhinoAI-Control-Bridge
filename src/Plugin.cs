@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.26.2.0")]
+[assembly: System.Reflection.AssemblyVersion("0.26.3.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -64,7 +64,7 @@ namespace RhinoAI
         readonly AutoSyncWatcher watcher;
         readonly DataGridView layers=new DataGridView();
         readonly TextBox log=new TextBox();
-        readonly FlowLayoutPanel actions=new FlowLayoutPanel();
+        readonly FlowLayoutPanel actions=new FlowLayoutPanel(),aiActions=new FlowLayoutPanel();
         readonly Label targetStatus=new Label();
         readonly ToolTip tips=new ToolTip{InitialDelay=350,ReshowDelay=100,AutoPopDelay=12000};
         readonly List<FlatButton> nav=new List<FlatButton>();
@@ -136,9 +136,9 @@ namespace RhinoAI
             aiPrompt.Multiline=true;aiPrompt.ScrollBars=ScrollBars.Vertical;aiPrompt.Text=config.AiPrompt;aiOutput.Text=config.AiOutput;
             Row(ai,"Prompt",new Field(aiPrompt,96),"The look you want. Image roles and the layer material mapping are added automatically.");
             Row(ai,"Render folder",Browse(aiOutput,false,true),"Finished images are saved here, named after their view.");
-            var aiActions=new FlowLayoutPanel{AutoSize=true,Margin=new Padding(0,Theme.S(4),0,Theme.S(8))};
+            
             renderButton=Button("Render ticked views",async delegate{await RenderViews();},ButtonKind.Primary);cancelButton=Button("Cancel",delegate{if(cancel!=null)cancel.Cancel();});cancelButton.Enabled=false;
-            aiActions.Controls.Add(renderButton);aiActions.Controls.Add(cancelButton);aiActions.Controls.Add(Button("Render folder",delegate{if(Directory.Exists(aiOutput.Text))Open(aiOutput.Text);},ButtonKind.Ghost));Add(ai,aiActions);
+            aiActions.Controls.Add(renderButton);aiActions.Controls.Add(cancelButton);aiActions.Controls.Add(Button("Render folder",delegate{if(Directory.Exists(aiOutput.Text))Open(aiOutput.Text);},ButtonKind.Ghost));
             foreach(var channel in PromptGuide.SceneChannels)channels.Items.Add(channel,(config.AiChannels==null||config.AiChannels.Count==0?PromptGuide.DefaultChannels:config.AiChannels.ToArray()).Contains(channel));
             FillViews(config.AiViews??new List<string>{CurrentView});
             engine.SelectedIndexChanged+=(s,e)=>ShowEngine();engine.SelectedItem=AiProviders.Find(config.AiEngine);
@@ -146,7 +146,9 @@ namespace RhinoAI
             var host=new Panel{Dock=DockStyle.Fill,Margin=Padding.Empty};
             foreach(var page in new[]{Page("Sync",sync),Page("AI render",ai),Page("Layer materials",material),Page("Background blend",blend),Page("Export settings",settings)}){pages.Add(page);host.Controls.Add(page);}
 
-            actions.Dock=DockStyle.Fill;actions.Margin=Padding.Empty;actions.Padding=new Padding(Theme.S(24),Theme.S(10),0,0);actions.WrapContents=false;
+            // The AI render page swaps in its own bar, so Render ticked views is always in sight.
+            foreach(var bar in new[]{actions,aiActions}){bar.Dock=DockStyle.Fill;bar.Margin=Padding.Empty;bar.Padding=new Padding(Theme.S(24),Theme.S(10),0,0);bar.WrapContents=false;}
+            var bars=new Panel{Dock=DockStyle.Fill,Margin=Padding.Empty};bars.Controls.Add(actions);bars.Controls.Add(aiActions);
             actions.Controls.Add(Button("Update to ComfyUI",async delegate{await Export(true,false);},ButtonKind.Primary));actions.Controls.Add(Button("Export only",async delegate{await Export(false,false);}));
             actions.Controls.Add(Tip(Button("Export folder",delegate{if(last!=null)Open(last.Directory);else if(Directory.Exists(output.Text))Open(output.Text);},ButtonKind.Ghost),"Opens the latest export, or the export folder."));actions.Controls.Add(Tip(Button("Change export folder",ChangeExportFolder,ButtonKind.Ghost),"Chooses where exports are written. The same setting as Export folder on the Export settings page."));actions.Controls.Add(Button("Open ComfyUI",delegate{Read();Open(config.Server);},ButtonKind.Ghost));
             log.Multiline=true;log.ReadOnly=true;log.BorderStyle=BorderStyle.None;log.ScrollBars=ScrollBars.None;log.Dock=DockStyle.Fill;log.BackColor=Theme.Bg;log.ForeColor=Theme.Muted;log.Font=mono;log.TabStop=false;
@@ -154,7 +156,7 @@ namespace RhinoAI
 
             var main=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=5,Margin=Padding.Empty};main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
             main.RowStyles.Add(new RowStyle(SizeType.Percent,100));main.RowStyles.Add(new RowStyle(SizeType.Absolute,1));main.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(54)));main.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(2)));main.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(92)));
-            main.Controls.Add(host,0,0);main.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=Theme.Border,Margin=Padding.Empty},0,1);main.Controls.Add(actions,0,2);main.Controls.Add(progress,0,3);main.Controls.Add(logHost,0,4);
+            main.Controls.Add(host,0,0);main.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=Theme.Border,Margin=Padding.Empty},0,1);main.Controls.Add(bars,0,2);main.Controls.Add(progress,0,3);main.Controls.Add(logHost,0,4);
 
             var side=new Panel{Dock=DockStyle.Left,Width=Theme.S(176),BackColor=Theme.Side};
             var menu=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,BackColor=Theme.Side,Padding=new Padding(Theme.S(10),Theme.S(14),Theme.S(10),Theme.S(8))};menu.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
@@ -179,7 +181,7 @@ namespace RhinoAI
             Activated+=(s,e)=>{if(actions.Enabled)FillViews(TickedViews());};
             Log("Ready.");
         }
-        void Go(int index){for(int i=0;i<pages.Count;i++){pages[i].Visible=i==index;nav[i].Selected=i==index;}}
+        void Go(int index){for(int i=0;i<pages.Count;i++){pages[i].Visible=i==index;nav[i].Selected=i==index;}aiActions.Visible=index==1;actions.Visible=index!=1;}
         static Panel Page(string title,Control body)
         {
             var page=new Panel{Dock=DockStyle.Fill,Visible=false,Padding=new Padding(Theme.S(28),Theme.S(18),Theme.S(20),Theme.S(12))};body.Dock=DockStyle.Fill;page.Controls.Add(body);
