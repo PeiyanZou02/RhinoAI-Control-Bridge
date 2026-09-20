@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.33.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.34.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -318,6 +318,21 @@ namespace RhinoAI
                 if(pair.Item2.Length>0)box.SelectedItem=AiProviders.Pick(pair.Item2,wanted);
             }
         }
+        // Vendors draw only a few fixed ratios. Exporting the Rhino frame in the very ratio the engine will use keeps the
+        // result from being stretched or recomposed. Only this capture is affected; the saved frame setting stays as it is.
+        Snapshot CaptureForEngine(AiProvider provider,ProviderSettings settings,Size viewport,bool announce)
+        {
+            bool locked=config.LockSceneAspect;int w=config.SceneAspectWidth,h=config.SceneAspectHeight;
+            var frame=provider==null||config.ProductMode?null:AiProviders.Frame(provider,settings,locked?w:viewport.Width,locked?h:viewport.Height);
+            if(frame==null)return Exporter.Capture(doc,config);
+            try
+            {
+                config.LockSceneAspect=true;config.SceneAspectWidth=frame[0];config.SceneAspectHeight=frame[1];
+                if(announce)Log("Frame set to "+frame[0]+":"+frame[1]+" for "+provider.Name+", so the result lines up with the Rhino view.");
+                return Exporter.Capture(doc,config);
+            }
+            finally{config.LockSceneAspect=locked;config.SceneAspectWidth=w;config.SceneAspectHeight=h;}
+        }
         static string FileName(string text){var invalid=Path.GetInvalidFileNameChars();string clean=new string((text??"").Select(c=>invalid.Contains(c)?'_':c).ToArray()).Trim().TrimEnd('.');return clean==""?"view":clean;}
         async Task RenderViews()
         {
@@ -344,7 +359,7 @@ namespace RhinoAI
                             if(!doc.NamedViews.Restore(index,vp))throw new InvalidOperationException("Rhino could not restore the named view");view.Redraw();
                         }
                         string label=name==CurrentView?savedName:name;Log("["+(i+1)+"/"+names.Count+"] "+label+": exporting control images…");
-                        var snapshot=Exporter.Capture(doc,config);
+                        var snapshot=CaptureForEngine(api?shown:null,settings,vp.Size,i==0);
                         last=await Task.Run(()=>Exporter.Render(snapshot,config,p=>{if(!IsDisposed)BeginInvoke((Action)(()=>progress.Value=Math.Min(99,(step*100+p/2)/names.Count)));}));
                         token.ThrowIfCancellationRequested();List<AiImage> images;
                         var skipped=new List<string>();StyleReferences.Prepare(last,config,skipped);foreach(var note in skipped)Log(note);
@@ -360,6 +375,7 @@ namespace RhinoAI
                             Log("["+(i+1)+"/"+names.Count+"] "+label+": queued in ComfyUI…");
                             using(var client=new ComfyClient(config.Server)){client.Timeout=TimeSpan.FromMinutes(5);images=await client.Generate(last,config,token);}
                         }
+                        if(api)images=images.Select(image=>image.Fit(snapshot.Camera.Width,snapshot.Camera.Height)).ToList();
                         string stamp=DateTime.Now.ToString("yyyyMMdd_HHmmss");
                         for(int n=0;n<images.Count;n++){string path=Path.Combine(config.AiOutput,FileName(label)+"_"+stamp+(n==0?"":"_"+(n+1))+images[n].Extension);File.WriteAllBytes(path,images[n].Bytes);Log("Saved: "+path);}
                         done++;

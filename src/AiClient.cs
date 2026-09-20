@@ -29,6 +29,27 @@ namespace RhinoAI
     public sealed class AiImage
     {
         public byte[] Bytes;
+        // Vendors round their canvas, for example 2752 x 1536 for 16:9. Trim the excess so the result overlays the Rhino frame exactly.
+        public AiImage Fit(int width,int height)
+        {
+            try
+            {
+                using(var memory=new MemoryStream(Bytes))using(var source=new System.Drawing.Bitmap(memory))
+                {
+                    double wanted=width/(double)Math.Max(1,height),actual=source.Width/(double)source.Height;
+                    if(Math.Abs(actual/wanted-1)<0.002)return this;
+                    int w=actual>wanted?(int)Math.Round(source.Height*wanted):source.Width,h=actual>wanted?source.Height:(int)Math.Round(source.Width/wanted);
+                    var crop=new System.Drawing.Rectangle((source.Width-w)/2,(source.Height-h)/2,w,h);
+                    using(var cut=source.Clone(crop,System.Drawing.Imaging.PixelFormat.Format24bppRgb))using(var output=new MemoryStream())
+                    {
+                        if(Extension==".jpg"){var codec=System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders().First(c=>c.FormatID==System.Drawing.Imaging.ImageFormat.Jpeg.Guid);using(var options=new System.Drawing.Imaging.EncoderParameters(1)){options.Param[0]=new System.Drawing.Imaging.EncoderParameter(System.Drawing.Imaging.Encoder.Quality,96L);cut.Save(output,codec,options);}}
+                        else cut.Save(output,System.Drawing.Imaging.ImageFormat.Png);
+                        return new AiImage{Bytes=output.ToArray()};
+                    }
+                }
+            }
+            catch(ArgumentException){return this;} // a format GDI+ cannot read, such as WebP: keep the vendor's file
+        }
         public string Extension {get{var b=Bytes;return b!=null&&b.Length>3&&b[0]==0xff&&b[1]==0xd8?".jpg":b!=null&&b.Length>3&&b[0]=='R'&&b[1]=='I'&&b[2]=='F'?".webp":".png";}}
     }
     public static class AiProviders
@@ -57,6 +78,17 @@ namespace RhinoAI
             if(provider.Id=="openai")return new[]{"auto","low","medium","high"}; // GPT Image sizes are fixed; this is its quality level
             if(provider.Id=="doubao")return model.Contains("seedream-4-0")?new[]{"auto","1K","2K","4K"}:new[]{"auto","2K","4K"};
             return new string[0];
+        }
+        // The frame the engine will really draw, so Rhino can export that exact ratio. Null means any ratio is accepted.
+        public static int[] Frame(AiProvider provider,ProviderSettings settings,int width,int height)
+        {
+            if(provider.Id==Comfy)return null;string aspect=Pick(Aspects(provider),settings.Aspect);
+            if(aspect=="auto")
+            {
+                if(provider.Id=="doubao")return null;
+                aspect=provider.Id=="openai"?(width>height*1.15?"3:2":height>width*1.15?"2:3":"1:1"):AiClient.NearestRatio(width,height);
+            }
+            var parts=aspect.Split(':');return new[]{int.Parse(parts[0]),int.Parse(parts[1])};
         }
         public static string Pick(string[] options,string wanted){return options.Length==0?"":options.Contains(wanted)?wanted:options[0];}
         // Pixel size with the area of a square of that resolution, the way Seedream defines 1K, 2K and 4K.

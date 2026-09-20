@@ -125,6 +125,8 @@ ComfyUI's image nodes are wrappers around vendor APIs. With your own API key, th
 | OpenAI GPT Image | 1:1, 3:2, 2:3 (fixed sizes) | quality: low, medium, high |
 | Doubao Seedream 4.0 / 4.5 | same ratios as Gemini, sent as a pixel size | 1K (4.0 only), 2K, 4K |
 
+   Vendors draw only these fixed ratios, so AI render exports the Rhino frame in the very ratio the engine will use instead of the saved widescreen frame. With `auto` that is the nearest supported ratio: the default 1024 : 589 frame becomes 16:9 for Gemini and 3:2 for GPT Image. The camera, lens and perspective stay the same; only the crop of the frame changes, and only for that render. A vendor canvas that is rounded, such as 2752 × 1536, is trimmed evenly so the saved result has exactly the exported ratio. Seedream accepts any pixel size and needs no adjustment. Background blend keeps the Wallpaper ratio.
+
 5. Tick the named views. **(Current viewport)** renders the view as it is now. **Reload views** reads the list from Rhino again.
 6. Tick the control images to send, write the prompt and choose the **Render folder**.
 7. Click **Render ticked views**. Each view is restored in the active viewport, exported, sent with the prompt, image roles and layer material mapping, and saved as `<view name>_<time>.png`. Your original view is restored at the end. **Cancel** stops the batch and drops the request in progress. A view that fails is reported and the batch continues.
