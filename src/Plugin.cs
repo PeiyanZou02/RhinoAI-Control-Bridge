@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.34.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.35.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -48,14 +48,14 @@ namespace RhinoAI
     }
     public sealed class BridgeWindow : Form
     {
-        const string Follow="Follow the current ComfyUI window",CurrentView="(Current viewport)";
+        const string Follow="Follow the current ComfyUI window",CurrentView="(Current viewport)",FrameAsIs="Locked frame or viewport, unchanged",FrameAuto="auto: nearest ratio image models draw";
         readonly RhinoDoc doc;
         readonly Config config;
         readonly TextBox server=new TextBox(),output=new TextBox(),workflow=new TextBox(),wear=new TextBox(),occlusion=new TextBox();
         readonly ComboBox target=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly NumericUpDown edge=new NumericUpDown(),padding=new NumericUpDown();
         readonly CheckBox selected=new CheckBox(),tryon=new CheckBox(),autoSync=new CheckBox(),syncStyle=new CheckBox(),detailPriority=new CheckBox(),adaptiveMask=new CheckBox(),wallpaperAspect=new CheckBox(),sceneAspect=new CheckBox();
-        readonly ComboBox engine=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},model=new ComboBox(),aspect=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},resolution=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
+        readonly ComboBox engine=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},model=new ComboBox(),frameRatio=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},aspect=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},resolution=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly TextBox apiKey=new TextBox{UseSystemPasswordChar=true},apiUrl=new TextBox(),aiPrompt=new TextBox(),aiOutput=new TextBox();
         readonly CheckedListBox views=new CheckedListBox(),channels=new CheckedListBox();
         readonly ListBox references=new ListBox{BorderStyle=BorderStyle.None,IntegralHeight=false,SelectionMode=SelectionMode.MultiExtended,HorizontalScrollbar=true};
@@ -122,6 +122,9 @@ namespace RhinoAI
             Row(settings,"ComfyUI address",Pair(new Field(server,34),Button("Test connection",async delegate{await RefreshWorkflows(false);})),null);
             Row(settings,"Export folder",Browse(output,false,true),null);Row(settings,"API workflow (optional)",Browse(workflow,true,false),"Only used to write a bound API JSON file. Nothing is queued.");
             Row(settings,"Longest edge (px)",new Field(edge,34),null);Add(settings,sceneAspect);
+            frameRatio.Items.Add(FrameAsIs);frameRatio.Items.Add(FrameAuto);frameRatio.Items.AddRange(AiProviders.ModelRatios);
+            frameRatio.SelectedItem=config.FrameRatio=="frame"||string.IsNullOrWhiteSpace(config.FrameRatio)?FrameAsIs:config.FrameRatio=="auto"?FrameAuto:frameRatio.Items.Contains(config.FrameRatio)?config.FrameRatio:FrameAuto;
+            Row(settings,"Frame ratio",new Field(frameRatio,34),"Image models such as Nano Banana draw only a few fixed ratios. Exporting one of them keeps the model from stretching or recomposing the view: auto turns the 1024 × 589 frame into 16:9. Camera and perspective stay the same. Set the model node in ComfyUI to the same ratio, or to auto. Background blend keeps the Wallpaper ratio.");
 
             var ai=Stack();
             foreach(var provider in AiProviders.All)engine.Items.Add(provider);
@@ -272,6 +275,7 @@ namespace RhinoAI
         {
             layers.EndEdit();foreach(DataGridViewRow row in layers.Rows){var l=(LayerRule)row.Tag;l.Material=Convert.ToString(row.Cells[2].Value).Trim();if(string.IsNullOrWhiteSpace(l.Material))throw new ArgumentException("Enter a target material for layer: "+l.Name);}
             config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.TargetWorkflow=SelectedTarget();config.LongEdge=(int)edge.Value;config.LockSceneAspect=sceneAspect.Checked;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.MatchWallpaperAspect=wallpaperAspect.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;config.SyncReferences=syncStyle.Checked;
+            string chosen=Convert.ToString(frameRatio.SelectedItem);config.FrameRatio=chosen==FrameAsIs?"frame":chosen==FrameAuto?"auto":chosen;
             StoreEngine();config.AiEngine=shown.Id;config.AiPrompt=aiPrompt.Text;config.AiOutput=aiOutput.Text.Trim();config.AiChannels=channels.CheckedItems.Cast<string>().ToList();config.AiViews=TickedViews();config.AiReferences=references.Items.Cast<string>().ToList();
         }
         void AddReferences()
@@ -322,16 +326,11 @@ namespace RhinoAI
         // result from being stretched or recomposed. Only this capture is affected; the saved frame setting stays as it is.
         Snapshot CaptureForEngine(AiProvider provider,ProviderSettings settings,Size viewport,bool announce)
         {
-            bool locked=config.LockSceneAspect;int w=config.SceneAspectWidth,h=config.SceneAspectHeight;
-            var frame=provider==null||config.ProductMode?null:AiProviders.Frame(provider,settings,locked?w:viewport.Width,locked?h:viewport.Height);
-            if(frame==null)return Exporter.Capture(doc,config);
-            try
-            {
-                config.LockSceneAspect=true;config.SceneAspectWidth=frame[0];config.SceneAspectHeight=frame[1];
-                if(announce)Log("Frame set to "+frame[0]+":"+frame[1]+" for "+provider.Name+", so the result lines up with the Rhino view.");
-                return Exporter.Capture(doc,config);
-            }
-            finally{config.LockSceneAspect=locked;config.SceneAspectWidth=w;config.SceneAspectHeight=h;}
+            bool locked=config.LockSceneAspect;
+            var frame=provider==null||config.ProductMode?null:AiProviders.Frame(provider,settings,locked?config.SceneAspectWidth:viewport.Width,locked?config.SceneAspectHeight:viewport.Height);
+            if(frame!=null&&announce)Log("Frame set to "+frame[0]+":"+frame[1]+" for "+provider.Name+", so the result lines up with the Rhino view.");
+            // Engines that accept any size fall back to the Frame ratio setting, like Update to ComfyUI.
+            return Exporter.Capture(doc,config,frame);
         }
         static string FileName(string text){var invalid=Path.GetInvalidFileNameChars();string clean=new string((text??"").Select(c=>invalid.Contains(c)?'_':c).ToArray()).Trim().TrimEnd('.');return clean==""?"view":clean;}
         async Task RenderViews()
@@ -375,7 +374,7 @@ namespace RhinoAI
                             Log("["+(i+1)+"/"+names.Count+"] "+label+": queued in ComfyUI…");
                             using(var client=new ComfyClient(config.Server)){client.Timeout=TimeSpan.FromMinutes(5);images=await client.Generate(last,config,token);}
                         }
-                        if(api)images=images.Select(image=>image.Fit(snapshot.Camera.Width,snapshot.Camera.Height)).ToList();
+                        images=images.Select(image=>image.Fit(snapshot.Camera.Width,snapshot.Camera.Height)).ToList();
                         string stamp=DateTime.Now.ToString("yyyyMMdd_HHmmss");
                         for(int n=0;n<images.Count;n++){string path=Path.Combine(config.AiOutput,FileName(label)+"_"+stamp+(n==0?"":"_"+(n+1))+images[n].Extension);File.WriteAllBytes(path,images[n].Bytes);Log("Saved: "+path);}
                         done++;
@@ -418,7 +417,7 @@ namespace RhinoAI
         }
         string SyncSettingsSignature()
         {
-            return string.Join("|",new[]{server.Text,output.Text,workflow.Text,Convert.ToString(target.SelectedItem),edge.Value.ToString(),sceneAspect.Checked.ToString(),selected.Checked.ToString(),syncStyle.Checked.ToString(),string.Join(";",references.Items.Cast<string>().Select(p=>p+AutoSyncWatcher.FileStamp(p))),tryon.Checked.ToString(),wallpaperAspect.Checked.ToString(),detailPriority.Checked.ToString(),adaptiveMask.Checked.ToString(),wear.Text,padding.Value.ToString(),occlusion.Text,AutoSyncWatcher.FileStamp(occlusion.Text),string.Join(";",layers.Rows.Cast<DataGridViewRow>().Select(r=>string.Join("|",r.Cells.Cast<DataGridViewCell>().Select(c=>Convert.ToString(c.Value)))))});
+            return string.Join("|",new[]{server.Text,output.Text,workflow.Text,Convert.ToString(target.SelectedItem),edge.Value.ToString(),sceneAspect.Checked.ToString(),Convert.ToString(frameRatio.SelectedItem),selected.Checked.ToString(),syncStyle.Checked.ToString(),string.Join(";",references.Items.Cast<string>().Select(p=>p+AutoSyncWatcher.FileStamp(p))),tryon.Checked.ToString(),wallpaperAspect.Checked.ToString(),detailPriority.Checked.ToString(),adaptiveMask.Checked.ToString(),wear.Text,padding.Value.ToString(),occlusion.Text,AutoSyncWatcher.FileStamp(occlusion.Text),string.Join(";",layers.Rows.Cast<DataGridViewRow>().Select(r=>string.Join("|",r.Cells.Cast<DataGridViewCell>().Select(c=>Convert.ToString(c.Value)))))});
         }
         async Task Export(bool send,bool automatic)
         {

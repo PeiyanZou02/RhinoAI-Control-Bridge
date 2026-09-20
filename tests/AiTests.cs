@@ -130,6 +130,8 @@ namespace RhinoAI
                 using(var result=new System.Drawing.Bitmap(new MemoryStream(fitted.Bytes)))check(result.Width==2731&&result.Height==1536&&result.GetPixel(1,700).B==255&&result.GetPixel(2729,700).B==255,"a rounded vendor canvas is trimmed evenly to the exported ratio");
                 var same=new AiImage{Bytes=memory.ToArray()};var junk=new AiImage{Bytes=new byte[]{1,2,3}};check(ReferenceEquals(same.Fit(2752,1536),same)&&ReferenceEquals(junk.Fit(16,9),junk),"matching or unreadable results are left untouched");
             }
+            check(AiProviders.ModelFrame("auto",1024,589).SequenceEqual(new[]{16,9})&&AiProviders.ModelFrame("auto",900,1200).SequenceEqual(new[]{3,4})&&AiProviders.ModelFrame("21:9",1024,589).SequenceEqual(new[]{21,9})&&AiProviders.ModelFrame("frame",1024,589)==null&&AiProviders.ModelFrame("",1024,589)==null&&AiProviders.ModelFrame("wide",1024,589)==null&&new Config().FrameRatio=="auto"&&AiProviders.ModelRatios.Length==10&&!AiProviders.ModelRatios.Contains("auto"),"the Frame ratio setting snaps exports to a ratio image models draw");
+            using(var square=new System.Drawing.Bitmap(64,64))using(var memory=new MemoryStream()){square.Save(memory,System.Drawing.Imaging.ImageFormat.Png);var squareImage=new AiImage{Bytes=memory.ToArray()};check(ReferenceEquals(squareImage.Fit(2048,1152),squareImage),"a deliberately different output format is never cropped");}
             check(AiClient.NearestRatio(683,1024)=="2:3"&&AiClient.NearestRatio(1000,1000)=="1:1","nearest supported aspect ratio");
 
             // A 20 px square on a 64 px canvas: every outline must be a single pixel wide.

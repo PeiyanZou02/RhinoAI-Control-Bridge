@@ -30,6 +30,8 @@ namespace RhinoAI
         public bool MatchWallpaperAspect=true;
         public bool LockSceneAspect=true;
         public int SceneAspectWidth=1024,SceneAspectHeight=589;
+        // "auto" = nearest ratio image models draw, "frame" = the locked frame or viewport as it is, or a ratio such as "16:9".
+        public string FrameRatio="auto";
         public bool DetailPriority=true;
         public bool AutoEditRegion=true;
         public bool AutoSync=false;
@@ -128,7 +130,9 @@ namespace RhinoAI
     }
     public static class Exporter
     {
-        public static Snapshot Capture(RhinoDoc doc,Config config)
+        public static Snapshot Capture(RhinoDoc doc,Config config){return Capture(doc,config,null);}
+        // frame: a ratio an AI render engine asks for. Without one, the Frame ratio setting decides.
+        public static Snapshot Capture(RhinoDoc doc,Config config,int[] frame)
         {
             var view=doc.Views.ActiveView;if(view==null)throw new InvalidOperationException("Activate a model viewport first.");
             if(view is RhinoPageView)throw new InvalidOperationException("Switch to a model-space viewport before exporting.");
@@ -138,7 +142,10 @@ namespace RhinoAI
             int longest=Math.Max(size.Width,size.Height),target=Math.Max(256,Math.Min(4096,config.LongEdge));
             int defaultW=Math.Max(1,(int)Math.Round(size.Width*(double)target/longest)),defaultH=Math.Max(1,(int)Math.Round(size.Height*(double)target/longest));
             var layout=new CanvasLayout{CaptureWidth=defaultW,CaptureHeight=defaultH,OutputWidth=defaultW,OutputHeight=defaultH,Crop=new Rectangle(0,0,defaultW,defaultH)};
-            if(!config.ProductMode&&config.LockSceneAspect)layout=WallpaperLayout(size.Width,size.Height,Math.Max(1,config.SceneAspectWidth),Math.Max(1,config.SceneAspectHeight),target);
+            // Image models draw a few fixed ratios only. Exporting one of them keeps the model from stretching or recomposing the view.
+            int[] ratio=config.ProductMode?null:frame??AiProviders.ModelFrame(config.FrameRatio,config.LockSceneAspect?config.SceneAspectWidth:size.Width,config.LockSceneAspect?config.SceneAspectHeight:size.Height);
+            if(ratio!=null)layout=WallpaperLayout(size.Width,size.Height,ratio[0],ratio[1],target);
+            else if(!config.ProductMode&&config.LockSceneAspect)layout=WallpaperLayout(size.Width,size.Height,Math.Max(1,config.SceneAspectWidth),Math.Max(1,config.SceneAspectHeight),target);
             int wallpaperWidth=0,wallpaperHeight=0;
             if(config.ProductMode&&config.MatchWallpaperAspect)
             {
@@ -184,7 +191,8 @@ namespace RhinoAI
             s.Warnings.Add("Control images treat transparent surfaces as opaque. basecolor is the flat material color without textures, lighting or PBR channels. Curves, points, annotations and unbaked Grasshopper previews are not included.");
             s.Warnings.Add("Material ID follows Rhino layers strictly: one color per layer. Per-face material overrides are not detected.");
             s.Warnings.Add("Normals are in camera space: R=right, G=up, B=toward camera. Edges come from occlusion, object boundaries, depth and normal changes, not Make2D or Canny.");
-            if(!config.ProductMode&&config.LockSceneAspect)s.Warnings.Add("Standard scene locked to the widescreen frame "+config.SceneAspectWidth+" × "+config.SceneAspectHeight+". Window and sidebar size no longer change the output, and all control images share one camera sub-frustum.");
+            if(ratio!=null)s.Warnings.Add("Frame exported at "+ratio[0]+":"+ratio[1]+", a ratio image models draw natively, so the result is not stretched or recomposed. Set the model node to the same ratio, or to auto. All control images share one camera sub-frustum.");
+            else if(!config.ProductMode&&config.LockSceneAspect)s.Warnings.Add("Standard scene locked to the widescreen frame "+config.SceneAspectWidth+" × "+config.SceneAspectHeight+". Window and sidebar size no longer change the output, and all control images share one camera sub-frustum.");
             if(config.ProductMode)
             {
                 s.WallpaperPath=vp.WallpaperFilename;
