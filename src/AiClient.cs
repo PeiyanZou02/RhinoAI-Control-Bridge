@@ -37,7 +37,8 @@ namespace RhinoAI
                 using(var memory=new MemoryStream(Bytes))using(var source=new System.Drawing.Bitmap(memory))
                 {
                     double wanted=width/(double)Math.Max(1,height),actual=source.Width/(double)source.Height;
-                    if(Math.Abs(actual/wanted-1)<0.002)return this;
+                    // Only rounding differences are trimmed. A workflow that deliberately outputs another format is left alone.
+                    if(Math.Abs(actual/wanted-1)<0.002||Math.Abs(actual/wanted-1)>0.05)return this;
                     int w=actual>wanted?(int)Math.Round(source.Height*wanted):source.Width,h=actual>wanted?source.Height:(int)Math.Round(source.Width/wanted);
                     var crop=new System.Drawing.Rectangle((source.Width-w)/2,(source.Height-h)/2,w,h);
                     using(var cut=source.Clone(crop,System.Drawing.Imaging.PixelFormat.Format24bppRgb))using(var output=new MemoryStream())
@@ -90,6 +91,15 @@ namespace RhinoAI
             }
             var parts=aspect.Split(':');return new[]{int.Parse(parts[0]),int.Parse(parts[1])};
         }
+        // The Frame ratio setting: "frame" keeps the Rhino frame, "auto" snaps it to the nearest model ratio, "a:b" forces one.
+        public static int[] ModelFrame(string choice,int width,int height)
+        {
+            choice=(choice??"").Trim();if(choice==""||choice=="frame")return null;
+            if(choice=="auto")choice=AiClient.NearestRatio(width,height);
+            var parts=choice.Split(':');int a,b;
+            return parts.Length==2&&int.TryParse(parts[0],out a)&&int.TryParse(parts[1],out b)&&a>0&&b>0?new[]{a,b}:null;
+        }
+        public static readonly string[] ModelRatios=Ratios.Skip(1).ToArray();
         public static string Pick(string[] options,string wanted){return options.Length==0?"":options.Contains(wanted)?wanted:options[0];}
         // Pixel size with the area of a square of that resolution, the way Seedream defines 1K, 2K and 4K.
         public static string PixelSize(string resolution,double ratio)

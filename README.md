@@ -148,6 +148,15 @@ For the ComfyUI engine, the API workflow can use `{{positive_prompt}}` for your 
 
 Vendor APIs are billed by the vendor per generated image.
 
+### Frame ratio
+
+Image models such as Nano Banana draw only a few fixed ratios: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9 and 21:9. A frame in any other ratio, including the 1024 × 589 widescreen frame, makes the model stretch or recompose the view. **Frame ratio** on the Export settings page therefore defaults to **auto**, which exports the nearest of those ratios: the widescreen frame becomes 16:9, so 2048 px exports 2048 × 1152. It applies to **Update to ComfyUI**, **Export only** and `Rhino2ComfyExport`. Camera, lens and perspective stay the same; only the crop of the frame changes.
+
+- Set the model node in ComfyUI to the same ratio, or to `auto`.
+- Pick a fixed ratio to force it, or **Locked frame or viewport, unchanged** for the previous behavior.
+- AI render uses the ratio of its own engine first and falls back to this setting for engines that accept any size.
+- Background blend keeps the Wallpaper ratio.
+
 ### Image size and line weight
 
 **Longest edge** on the Export settings page sets the size of every control image and defaults to 2048 px. The locked widescreen frame keeps the 1024 : 589 ratio at any size, so 2048 exports 2048 × 1178. Settings saved with the old 1024 default move to 2048 once; a value you set yourself afterwards is kept.
