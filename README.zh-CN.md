@@ -34,7 +34,7 @@
 
 ### Rhino 插件
 
-1. 下载 `dist/RhinoAI.rhp`，或者从源码构建。
+1. 下载 `dist/Rhino2Comfy.rhp`，或者从源码构建。
 2. 把 `.rhp` 拖入 Rhino 8，或运行 `PlugInManager`，点击 **Install** 并选择该文件。
 3. 如有提示，重启 Rhino。
 4. 在 Rhino 命令栏运行 `Rhino2Comfy`。
@@ -147,7 +147,7 @@ Material ID 现在使用黑色背景，并严格跟随 Rhino 图层显示颜色�
 node .\tests\sync-core.test.mjs
 ```
 
-构建脚本使用已安装的 Rhino 8 `RhinoCommon.dll`。在 PowerShell 7 中使用其自带的 Roslyn 编译器；在 Windows PowerShell 5.1 中自动改用 Rhino 8 自带的 Roslyn，因此无需另装 PowerShell 7。输出文件为 `dist/RhinoAI.rhp`。
+构建脚本使用已安装的 Rhino 8 `RhinoCommon.dll`。在 PowerShell 7 中使用其自带的 Roslyn 编译器；在 Windows PowerShell 5.1 中自动改用 Rhino 8 自带的 Roslyn，因此无需另装 PowerShell 7。输出文件为 `dist/Rhino2Comfy.rhp`。
 
 同步测试会验证插件只上传和发布输入，不调用 ComfyUI 的 Prompt 或 Queue 接口。
 
