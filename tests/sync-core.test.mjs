@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { validateManifest, bindBatch, updateGraph, mergePrompt, findUnfilledNanoBatch, channelsFor, batchConnected, imageGuide, seedPrompt, removeImageGuide, migrateBatchPrompt } from "../comfyui/rhino_ai_live/web/sync-core.mjs";
+import { validateManifest, bindBatch, updateGraph, mergePrompt, findUnfilledNanoBatch, channelsFor, batchConnected, imageGuide, seedPrompt, removeImageGuide, migrateBatchPrompt, targetState, workflowName, insertInputGroup, findUnfilledBatch } from "../comfyui/rhino_ai_live/web/sync-core.mjs";
 
 let nextId=10, nextLink=1;
 const graph={_nodes:[],links:{},getNodeById(id){return this._nodes.find(n=>n.id===id);},add(node){node.id=nextId++;this._nodes.push(node);},setDirtyCanvas(){},remove(n){this._nodes=this._nodes.filter(x=>x!==n);}};
@@ -80,10 +80,10 @@ assert.equal(channelsFor(expanded).length,14);assert(batchConnected(graph,unfill
 assert(imageGuide(expanded,channelsFor(expanded)).includes("Image 1 (reference):"));
 assert(imageGuide(expanded,channelsFor(expanded)).includes("Image 14 (future_channel):"));
 const wallpaperGuide=imageGuide({...expanded,prompts:{color_materials:'#E63946 = ceramic',user_prompt:'Replace the original earring at the aligned location.'}},channelsFor(expanded));
-assert(wallpaperGuide.includes('MANDATORY PRIMARY BASE IMAGE'));assert(wallpaperGuide.includes('never return an isolated product'));assert(wallpaperGuide.includes('Rhino user instruction'));assert(wallpaperGuide.includes('Replace the original earring'));
-const detailImages={...expanded.images,scale_lock:'rhino_ai/all/scale_lock.png',placement_detail:'rhino_ai/all/placement_detail.png',rendered_detail:'rhino_ai/all/rendered_detail.png',shape_lock_detail:'rhino_ai/all/shape_lock_detail.png',material_id_detail:'rhino_ai/all/material_id_detail.png',normal_detail:'rhino_ai/all/normal_detail.png',edges_detail:'rhino_ai/all/edges_detail.png',depth_detail:'rhino_ai/all/depth_detail.png',product_mask:'rhino_ai/all/product_mask.png'};
+assert(wallpaperGuide.includes('MANDATORY PRIMARY BASE IMAGE'));assert(wallpaperGuide.includes('never return an isolated object'));assert(wallpaperGuide.includes('Rhino user instruction'));assert(wallpaperGuide.includes('Replace the original earring'));
+const detailImages={...expanded.images,scale_lock:'rhino_ai/all/scale_lock.png',placement_detail:'rhino_ai/all/placement_detail.png',rendered_detail:'rhino_ai/all/rendered_detail.png',shape_lock_detail:'rhino_ai/all/shape_lock_detail.png',material_id_detail:'rhino_ai/all/material_id_detail.png',normal_detail:'rhino_ai/all/normal_detail.png',edges_detail:'rhino_ai/all/edges_detail.png',depth_detail:'rhino_ai/all/depth_detail.png',object_mask:'rhino_ai/all/object_mask.png'};
 const detailData={...expanded,images:detailImages};
-assert.deepEqual(channelsFor(detailData),['reference','placement','scale_lock','shape_lock_detail','material_id_detail','normal_detail','edges_detail','depth_detail','product_mask','inpaint_mask','occlusion_mask','future_channel']);
+assert.deepEqual(channelsFor(detailData),['reference','placement','scale_lock','shape_lock_detail','material_id_detail','normal_detail','edges_detail','depth_detail','object_mask','inpaint_mask','occlusion_mask','future_channel']);
 const detailGuide=imageGuide({...detailData,prompts:{placement_constraint:'FULL-FRAME PLACEMENT LOCK: normalized box=(0.48,0.52)-(0.53,0.60).'}},channelsFor(detailData));assert(detailGuide.includes('IDENTICAL camera projection'));assert(detailGuide.includes('Never infer a new camera'));assert(detailGuide.includes('ABSOLUTE FULL-FRAME authority'));assert(detailGuide.includes('normalized box='));assert(detailGuide.includes('MANDATORY CLEAN FINAL OUTPUT'));assert(detailGuide.includes('MANDATORY REFERENCE APPEARANCE LOCK'));assert(detailGuide.includes('SOLE APPEARANCE AUTHORITY'));assert(detailGuide.includes('Never average, blend or transfer appearance'));assert(detailGuide.includes('remove every technical overlay'));assert(detailGuide.includes('restore its original brightness, contrast, tonal range and color exactly'));assert(detailGuide.includes('zero bounding box, crosshair, guide line'));
 assert(detailGuide.includes('EDITABLE NEIGHBORHOOD'));assert(detailGuide.includes('white area is never a scale'));
 assert(detailGuide.includes('TECHNICAL MEASUREMENT INPUT ONLY'));assert(detailGuide.includes('same left/right/top/bottom bounds'));
@@ -113,3 +113,38 @@ console.log('Channel removal verified: managed node deleted, seven inputs retain
 const sceneData={schema:'rhino-ai-live/1',revision:'scene',images:{shape_lock:'rhino_ai/scene/shape_lock.png',rendered:'rhino_ai/scene/rendered.png',depth:'rhino_ai/scene/depth.png',depth_inverse:'rhino_ai/scene/depth_inverse.png',edges:'rhino_ai/scene/edges.png',silhouette:'rhino_ai/scene/silhouette.png',normal:'rhino_ai/scene/normal.png',mask:'rhino_ai/scene/mask.png',material_id:'rhino_ai/scene/material_id.png'},prompts:{color_materials:'#112233 = metal',user_prompt:'',placement_constraint:''},input_profile:'scene'};
 const sceneGuide=imageGuide(sceneData,channelsFor(sceneData));assert(sceneGuide.includes('STANDARD RHINO SCENE MODE'));assert(sceneGuide.includes('original scene-control behavior'));assert(sceneGuide.includes('Do not apply any Wallpaper placement'));assert(!sceneGuide.includes('MANDATORY REFERENCE APPEARANCE LOCK'));assert(!sceneGuide.includes('Global-versus-detail rule'));
 console.log('Scene-mode isolation passed: legacy Rhino controls remain separate from Wallpaper placement rules.');
+
+// Target workflow selection.
+const targeted={...sceneData,target:{workflow:'CHOGA.json',request:'r1'}};
+assert(validateManifest(targeted));assert(validateManifest({...sceneData,target:{workflow:'jewelry/ring v2.json',request:'r'}}));
+assert(!validateManifest({...sceneData,target:{workflow:'../secret.json',request:'r'}}));
+assert(!validateManifest({...sceneData,target:{workflow:'a/../../b.json',request:'r'}}));
+assert(!validateManifest({...sceneData,target:{workflow:'sub\\x.json',request:'r'}}));
+assert(!validateManifest({...sceneData,target:{workflow:'/abs.json',request:'r'}}));
+assert(!validateManifest({...sceneData,target:{workflow:'notjson.txt',request:'r'}}));
+assert(!validateManifest({...sceneData,target:{workflow:'CHOGA.json'}}));
+assert.equal(workflowName('workflows/CHOGA.json'),'CHOGA.json');
+assert.equal(targetState(sceneData,'workflows/anything.json'),'follow');
+assert.equal(targetState(targeted,'workflows/CHOGA.json'),'match');
+assert.equal(targetState(targeted,'workflows/xxx.json'),'mismatch');
+assert.equal(targetState(targeted,undefined),'mismatch');
+console.log('Target workflow checks passed: manifest validation rejects traversal, follow/match/mismatch resolved.');
+
+// Empty workflow: one click inserts a model-agnostic Batch + Rhino loaders.
+let emptyId=1,emptyLink=1;
+const empty={_nodes:[],links:{},getNodeById(id){return this._nodes.find(n=>n.id===id);},add(n){n.id=emptyId++;this._nodes.push(n);},setDirtyCanvas(){},remove(n){this._nodes=this._nodes.filter(x=>x!==n);}};
+function emptyNode(type){const n=node(type);n.disconnectInput=function(){};n.connect=function(slot,target,targetSlot){const id=emptyLink++;empty.links[id]={origin_id:this.id,target_id:target.id};this.outputs[slot].links.push(id);target.inputs[targetSlot].link=id;};return n;}
+const inserted=await insertInputGroup(empty,sceneData,emptyNode,[500,200]);
+assert.equal(inserted.type,'BatchImagesNode');assert.deepEqual(inserted.pos,[500,200]);
+assert.equal(empty._nodes.filter(n=>n.type==='LoadImage').length,9);
+assert.equal(empty._nodes.length,10);assert(batchConnected(empty,inserted,sceneData));assert.equal(inserted.properties.rhino_ai_live,true);
+assert(!empty._nodes.some(n=>n.type==='GeminiImage2Node'));
+const painted=[];await updateGraph(empty,sceneData,emptyNode,(n,path)=>painted.push(path));assert.equal(painted.length,9);
+
+// Auto-bind no longer requires a Nano Banana target.
+const other={_nodes:[],links:{},getNodeById(id){return this._nodes.find(n=>n.id===id);},add(n){n.id=emptyId++;this._nodes.push(n);}};
+function otherNode(type){const n=node(type);n.connect=function(slot,target,targetSlot){const id=emptyLink++;other.links[id]={origin_id:this.id,target_id:target.id};this.outputs[slot].links.push(id);target.inputs[targetSlot].link=id;};return n;}
+const ob=otherNode('BatchImagesNode'),ol=otherNode('LoadImage'),og=otherNode('SomeOtherApiNode');other.add(ob);other.add(ol);other.add(og);
+ob.addInput('images.image0','IMAGE');og.addInput('images','IMAGE');ol.widgets[0].value='';ol.connect(0,ob,0);ob.connect(0,og,0);
+assert.equal(findUnfilledBatch(other),ob);
+console.log('Input-group checks passed: empty workflow gets Batch + 9 loaders, no generator assumed, non-Gemini auto-bind.');

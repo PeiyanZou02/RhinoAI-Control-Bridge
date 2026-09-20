@@ -96,7 +96,7 @@ namespace RhinoAI
         {
             Directory.CreateDirectory(directory);
             var visible=Depth.Where(d=>!float.IsInfinity(d)).ToArray();
-            if(visible.Length==0)throw new InvalidOperationException("当前视角没有可导出的可见网格表面。");
+            if(visible.Length==0)throw new InvalidOperationException("No visible mesh surfaces in the current view.");
             double near=visible.Min(),far=visible.Max(),range=Math.Max(1e-8,far-near);
             int n=Depth.Length,w=Camera.Width,h=Camera.Height;
             var maps=new Dictionary<string,int[]>();
@@ -152,7 +152,7 @@ namespace RhinoAI
         public static int Palette(int id)
         {
             // Saturated, widely separated colors remain readable on the black ID-map
-            // background, including on very thin jewelry parts.
+            // background, including on very thin parts.
             int[] first={0,0xff1744,0x00e5ff,0xffea00,0x651fff,0x00e676,0xff6d00,0x2979ff,0xf500ff,0x76ff03,0xff4081,0x00bfa5,0xc6a0ff,0xffffff,0x8b4513};
             if(id<first.Length)return first[id];
             // Odd multiplication permutes the 24-bit integer space, so IDs remain unique.

@@ -5,8 +5,27 @@ $rhino = 'C:\Program Files\Rhino 8\System'
 New-Item -ItemType Directory -Force -Path (Join-Path $root 'dist') | Out-Null
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.cs' | Select-Object -ExpandProperty FullName)
 if ($Tests) { $sources += @(Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Filter '*.cs' | Select-Object -ExpandProperty FullName) }
-# PowerShell 7 bundles Roslyn; no separate .NET SDK or NuGet download is needed.
+# PowerShell 7 bundles Roslyn. Windows PowerShell 5.1 borrows the copy that ships with Rhino 8,
+# so no separate .NET SDK, NuGet download or PowerShell upgrade is needed.
 Add-Type -TypeDefinition 'public class RhinoAIBuildWarmup {}' -ErrorAction SilentlyContinue
+if (-not ('Microsoft.CodeAnalysis.CSharp.CSharpCompilation' -as [type])) {
+    # Rhino's Roslyn depends on newer System.Memory/Immutable builds than .NET Framework binds by default.
+    Add-Type -TypeDefinition @"
+using System;using System.IO;using System.Reflection;
+public static class RhinoAIRoslynResolver {
+    static string dir;
+    public static void Install(string folder){dir=folder;AppDomain.CurrentDomain.AssemblyResolve+=Resolve;}
+    static Assembly Resolve(object sender,ResolveEventArgs args){
+        string name=new AssemblyName(args.Name).Name;if(name.EndsWith(".resources"))return null;
+        foreach(var loaded in AppDomain.CurrentDomain.GetAssemblies())if(loaded.GetName().Name==name)return loaded;
+        string path=Path.Combine(dir,name+".dll");return File.Exists(path)?Assembly.LoadFrom(path):null;
+    }
+}
+"@
+    [RhinoAIRoslynResolver]::Install($rhino)
+    [void][Reflection.Assembly]::LoadFrom((Join-Path $rhino 'Microsoft.CodeAnalysis.dll'))
+    [void][Reflection.Assembly]::LoadFrom((Join-Path $rhino 'Microsoft.CodeAnalysis.CSharp.dll'))
+}
 $framework = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319'
 $refs = @('mscorlib.dll','System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Net.Http.dll') | ForEach-Object { Join-Path $framework $_ }
 $refs += @((Join-Path $rhino 'RhinoCommon.dll'),(Join-Path $rhino 'Newtonsoft.Json.dll'))
