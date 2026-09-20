@@ -116,9 +116,18 @@ ComfyUI's image nodes are wrappers around vendor APIs. With your own API key, th
 | ComfyUI | queues the **API workflow** from Export settings and downloads its saved images | none |
 
 3. Paste the API key, or leave the field empty to use the environment variable. Each engine keeps its own key, model and address. The model list is editable, so newer models can be typed in. Change the API address only for a proxy or a compatible gateway.
-4. Tick the named views. **(Current viewport)** renders the view as it is now. **Reload views** reads the list from Rhino again.
-5. Tick the control images to send, write the prompt and choose the **Render folder**.
-6. Click **Render ticked views**. Each view is restored in the active viewport, exported, sent with the prompt, image roles and layer material mapping, and saved as `<view name>_<time>.png`. Your original view is restored at the end. **Cancel** stops the batch and drops the request in progress. A view that fails is reported and the batch continues.
+4. Choose **Aspect ratio** and **Resolution**. `auto` follows the exported frame and the Longest edge setting. The lists show only what the chosen engine and model accept:
+
+| Engine | Aspect ratio | Resolution |
+| --- | --- | --- |
+| Gemini 3 image models | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9 | 1K, 2K, 4K |
+| Gemini 2.5 Flash Image | same ratios | fixed by the model |
+| OpenAI GPT Image | 1:1, 3:2, 2:3 (fixed sizes) | quality: low, medium, high |
+| Doubao Seedream 4.0 / 4.5 | same ratios as Gemini, sent as a pixel size | 1K (4.0 only), 2K, 4K |
+
+5. Tick the named views. **(Current viewport)** renders the view as it is now. **Reload views** reads the list from Rhino again.
+6. Tick the control images to send, write the prompt and choose the **Render folder**.
+7. Click **Render ticked views**. Each view is restored in the active viewport, exported, sent with the prompt, image roles and layer material mapping, and saved as `<view name>_<time>.png`. Your original view is restored at the end. **Cancel** stops the batch and drops the request in progress. A view that fails is reported and the batch continues.
 
 The exact prompt sent for each view is kept as `ai_prompt.txt` in that view's export folder. Export options such as the longest edge, the locked widescreen frame, selected objects only and Background blend apply to every view. Background blend always sends its own reference, placement and mask images.
 

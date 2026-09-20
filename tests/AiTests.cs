@@ -44,6 +44,14 @@ namespace RhinoAI
             Wait(async()=>{using(var client=new AiClient(pro))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-3-pro-image-preview",BaseUrl="https://proxy.example/v1beta/"},"k","p",inputs,2048,2048,none);});
             check(pro.Requests[0].RequestUri.ToString().StartsWith("https://proxy.example/v1beta/models/gemini-3-pro-image-preview")&&(string)JObject.Parse(pro.Bodies[0]).SelectToken("generationConfig.imageConfig.imageSize")=="2K","custom address, custom model and Gemini 3 output size");
 
+            var sized=new Vendor{Reply=google.Reply};
+            Wait(async()=>{using(var client=new AiClient(sized))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-3-pro-image-preview",Aspect="4:5",Resolution="4K"},"k","p",inputs,1024,589,none);});
+            check((string)JObject.Parse(sized.Bodies[0]).SelectToken("generationConfig.imageConfig.aspectRatio")=="4:5"&&(string)JObject.Parse(sized.Bodies[0]).SelectToken("generationConfig.imageConfig.imageSize")=="4K","chosen Gemini aspect ratio and resolution are sent");
+            Wait(async()=>{using(var client=new AiClient(sized))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Resolution="4K"},"k","p",inputs,1024,589,none);});
+            check(JObject.Parse(sized.Bodies[1]).SelectToken("generationConfig.imageConfig.imageSize")==null,"a resolution the model cannot take is never sent");
+            check(AiProviders.Resolutions(AiProviders.Find("google"),"gemini-2.5-flash-image").SequenceEqual(new[]{"auto"})&&AiProviders.Resolutions(AiProviders.Find("doubao"),"doubao-seedream-4-5-251128").SequenceEqual(new[]{"auto","2K","4K"})&&AiProviders.Aspects(AiProviders.Find("openai")).Length==4&&AiProviders.Aspects(AiProviders.Find(AiProviders.Comfy)).Length==0,"options follow the engine and model");
+            check(AiProviders.PixelSize("2K",16/9.0)=="2731x1536"&&AiProviders.PixelSize("1K",1)=="1024x1024","pixel size keeps the resolution's area at any ratio");
+
             var blocked=new Vendor{Reply=r=>Json("{\"candidates\":[{\"finishReason\":\"IMAGE_SAFETY\",\"content\":{\"parts\":[{\"text\":\"cannot\"}]}}]}")};string message="";
             try{Wait(async()=>{using(var client=new AiClient(blocked))return await client.Generate(AiProviders.Find("google"),new ProviderSettings(),"k","p",inputs,100,100,none);});}catch(InvalidOperationException e){message=e.Message;}
             check(message.Contains("IMAGE_SAFETY")&&message.Contains("cannot"),"a reply without an image explains why");
@@ -53,11 +61,15 @@ namespace RhinoAI
             check(openai.Requests[0].RequestUri.ToString()=="https://api.openai.com/v1/images/edits"&&openai.Requests[0].Headers.Authorization.ToString()=="Bearer o-key","OpenAI edits endpoint with bearer key");
             check(openai.Bodies[0].Split(new[]{"name=\"image[]\""},StringSplitOptions.None).Length==3&&openai.Bodies[0].Contains("1024x1536")&&openai.Bodies[0].Contains("gpt-image-1"),"OpenAI multipart carries both images, the model and a portrait size");
             check(made.Count==1&&made[0].Bytes.Length==pixels.Length,"OpenAI base64 image decoded");
+            check(!openai.Bodies[0].Contains("name=quality")&&!openai.Bodies[0].Contains("name=\"quality\""),"OpenAI quality is left to the vendor on auto");
+            Wait(async()=>{using(var client=new AiClient(openai))return await client.Generate(AiProviders.Find("openai"),new ProviderSettings{Aspect="3:2",Resolution="high"},"k","p",inputs,600,1000,none);});
+            check(openai.Bodies[1].Contains("1536x1024")&&openai.Bodies[1].Contains("high"),"chosen OpenAI size and quality are sent");
 
             var doubao=new Vendor{Reply=r=>r.RequestUri.Host=="cdn.example"?new HttpResponseMessage(HttpStatusCode.OK){Content=new ByteArrayContent(new byte[]{0xff,0xd8,0xff,0xe0})}:Json("{\"data\":[{\"url\":\"https://cdn.example/out.jpg\"}]}")};
             made=Wait(async()=>{using(var client=new AiClient(doubao))return await client.Generate(AiProviders.Find("doubao"),new ProviderSettings(),"d-key","p",inputs,1024,589,none);});
             sent=JObject.Parse(doubao.Bodies[0]);
             check(doubao.Requests[0].RequestUri.ToString()=="https://ark.cn-beijing.volces.com/api/v3/images/generations"&&((JArray)sent["image"]).Count==2&&((string)sent["image"][0]).StartsWith("data:image/png;base64,")&&(bool)sent["watermark"]==false,"Doubao request carries data-URL images without a watermark");
+            check((string)sent["size"]==AiProviders.PixelSize("1K",1024/589.0),"Doubao auto size follows the exported frame");
             check(made.Count==1&&made[0].Extension==".jpg"&&doubao.Requests[1].Headers.Authorization==null,"Doubao URL result downloaded without forwarding the key");
 
             var denied=new Vendor{Reply=r=>Json("{\"error\":{\"message\":\"Incorrect API key provided\"}}",HttpStatusCode.Unauthorized)};message="";
