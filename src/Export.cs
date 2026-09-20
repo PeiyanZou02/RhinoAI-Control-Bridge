@@ -33,6 +33,7 @@ namespace RhinoAI
         public bool DetailPriority=true;
         public bool AutoEditRegion=true;
         public bool AutoSync=false;
+        public bool SyncReferences=true; // send the AI render style photos with Update to ComfyUI too
         public string WearInstructions="Blend the Rhino objects into the background photograph at the exact projected location, scale and orientation. Match the photograph's lighting direction, perspective, color and grain. Add natural contact shadows and reflections. Let foreground elements of the photograph occlude the objects where physically appropriate. Keep everything outside the edit region unchanged.";
         public int MaskPadding=12;
         public string OcclusionMask="";

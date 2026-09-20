@@ -126,7 +126,7 @@ namespace RhinoAI
         public static List<KeyValuePair<string,string>> Select(ExportResult export,Config config,int max,List<string> notes)
         {
             List<KeyValuePair<string,string>> images;
-            if(config.ProductMode)images=ComfyClient.SelectForBatch(export.Files,config).ToList();
+            if(config.ProductMode)images=ComfyClient.SelectForBatch(export.Files,config).Where(x=>!x.Key.StartsWith(StyleReferences.Prefix)).ToList();
             else
             {
                 var wanted=config.AiChannels==null||config.AiChannels.Count==0?DefaultChannels:config.AiChannels.ToArray();
@@ -146,15 +146,14 @@ namespace RhinoAI
             lines.Add("Use the supplied input images according to the exact roles below.");
             if(channels.Contains("reference"))lines.Add("MANDATORY REFERENCE APPEARANCE LOCK: reference alone controls the complete frame's color or monochrome mode, white balance, exposure, brightness, contrast, tonal range, colors and background. Never average, blend or transfer appearance from scale_lock, placement, masks, depth, normals, edges, shape_lock or material_id; they are technical data only.");
             if(channels.Contains("scale_lock"))lines.Add("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual object.");
-            string styleRole="STYLE REFERENCE ONLY, never a geometry or composition reference; a real photograph chosen by the user for its look";
-            for(int i=0;i<channels.Count;i++){string role;if(channels[i].StartsWith(StyleReferences.Prefix)){lines.Add(Label(i,channels[i])+": "+styleRole+".");continue;}lines.Add(Label(i,channels[i])+": "+(Roles.TryGetValue(channels[i],out role)?role:"additional visual reference; use only for the information visibly encoded in this image")+".");}
+            for(int i=0;i<channels.Count;i++){string role;if(channels[i].StartsWith(StyleReferences.Prefix)){lines.Add(Label(i,channels[i])+": "+StyleReferences.Role+".");continue;}lines.Add(Label(i,channels[i])+": "+(Roles.TryGetValue(channels[i],out role)?role:"additional visual reference; use only for the information visibly encoded in this image")+".");}
             if(channels.Contains("reference"))
             {
                 lines.Add("The reference image is the mandatory base canvas for the final output. Return an edited version of that same scene, keep its framing and background, and integrate the object at the placement shown; never return an isolated object on a new background.");
                 lines.Add("Global-versus-detail rule: reference and placement control the full-frame composition, final object location and real scale in the scene. The *_detail images are magnified digital crops rendered from the IDENTICAL camera projection, lens, orientation and perspective rays; they are not alternate viewpoints. Use them only for fine geometry, curvature, openings, seams and material interfaces. Never infer a new camera, change perspective, enlarge the object or move it in the final full-frame image. The inpaint mask is only a permissible editing neighborhood; its white area is never a scale, shape or bounding-box reference. Geometry conflict priority: full-frame placement for scale/location, then shape_lock_detail or shape_lock > silhouette and edges > masks > depth and normal > rendered. Material ID images govern material regions only and must never alter geometry.");
             }
             else lines.Add("STANDARD RHINO SCENE MODE: preserve the exact full-frame camera, composition, object count, silhouettes, openings, overlaps and relative scale shown by the control images. Use depth, edges, silhouette, normal and mask only as coordinated geometry evidence. Use material_id only to assign the requested materials to its flat-color regions. The technical control images must never appear in the result.");
-            if(channels.Any(c=>c.StartsWith(StyleReferences.Prefix)))lines.Add("STYLE TRANSFER RULE: study the style_reference photographs and extract only their photographic qualities: light quality, direction and softness, exposure, dynamic range, white balance, color grading, contrast, material realism and surface imperfection, reflections, atmosphere, depth of field, lens character and film or sensor grain. Render the Rhino scene with those qualities so the result reads as a real photograph of the same kind, not a CG image. Never copy their objects, architecture, furniture, people, text, composition, framing or camera. Geometry, camera, object count and material regions come only from the Rhino control images, and the material mapping still decides what each region is made of."+(channels.Contains("reference")?" In this background blend the reference photograph still controls the appearance of the whole frame; use the style references only for the realism of the inserted object's materials.":""));
+            if(channels.Any(c=>c.StartsWith(StyleReferences.Prefix)))lines.Add(StyleReferences.Rule+(channels.Contains("reference")?StyleReferences.BlendRule:""));
             if(!string.IsNullOrWhiteSpace(export.PlacementConstraint))lines.Add(export.PlacementConstraint.Trim());
             if(!string.IsNullOrWhiteSpace(export.Prompt)&&channels.Any(c=>c.StartsWith("material_id")))lines.Add("Material mapping for the material_id image:\n"+export.Prompt.Trim());
             string instruction=config.ProductMode?(config.WearInstructions??"").Trim():"";
@@ -169,6 +168,10 @@ namespace RhinoAI
     {
         public const string Prefix="style_reference_";
         public const int Max=4,LongEdge=1536;
+        // The same wording is used by imageGuide in comfyui/rhino_ai_live/web/sync-core.mjs.
+        public const string Role="STYLE REFERENCE ONLY, never a geometry or composition reference; a real photograph chosen by the user for its look";
+        public const string Rule="STYLE TRANSFER RULE: study the style_reference photographs and extract only their photographic qualities: light quality, direction and softness, exposure, dynamic range, white balance, color grading, contrast, material realism and surface imperfection, reflections, atmosphere, depth of field, lens character and film or sensor grain. Render the Rhino scene with those qualities so the result reads as a real photograph of the same kind, not a CG image. Never copy their objects, architecture, furniture, people, text, composition, framing or camera. Geometry, camera, object count and material regions come only from the Rhino control images, and the material mapping still decides what each region is made of.";
+        public const string BlendRule=" In this background blend the reference photograph still controls the appearance of the whole frame; use the style references only for the realism of the inserted object's materials.";
         public static string Mime(string path){string e=Path.GetExtension(path).ToLowerInvariant();return e==".jpg"||e==".jpeg"?"image/jpeg":e==".webp"?"image/webp":"image/png";}
         public static void Prepare(ExportResult export,Config config,List<string> notes)
         {

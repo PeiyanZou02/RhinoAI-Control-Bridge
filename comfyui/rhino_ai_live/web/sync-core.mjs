@@ -14,7 +14,7 @@ const settle = () => new Promise(resolve => {
 export function validateManifest(data) {
   if (data?.schema !== "rhino-ai-live/1" || typeof data.revision !== "string" || !data.images) return false;
   if (data.target !== undefined && !validTarget(data.target)) return false;
-  return Object.entries(data.images).every(([key, path]) => /^[a-z_0-9]+$/.test(key) && typeof path === "string" && /^rhino_ai\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+\.png$/.test(path));
+  return Object.entries(data.images).every(([key, path]) => /^[a-z_0-9]+$/.test(key) && typeof path === "string" && /^rhino_ai\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+\.(png|jpe?g)$/.test(path));
 }
 function validTarget(target) {
   const name=target?.workflow;
@@ -53,8 +53,13 @@ const ROLES = {
   inpaint_mask:"EDITABLE NEIGHBORHOOD reference; white marks where existing content may be removed and local pixels may be regenerated, while black must be preserved. The white region is NOT the new object silhouette or size: never scale the object to fill it; final object scale and bounds come only from the full-frame placement image",
   occlusion_mask:"occlusion-protection reference; white protected foreground pixels of the photograph must remain unchanged and stay in front where appropriate"
 };
+// Style photos arrive as style_reference_1..4 and sort behind the Rhino controls. Keep the wording in step with PromptGuide in src/AiClient.cs.
+const STYLE_PREFIX = "style_reference_";
+const STYLE_ROLE = "STYLE REFERENCE ONLY, never a geometry or composition reference; a real photograph chosen by the user for its look";
+const STYLE_RULE = "STYLE TRANSFER RULE: study the style_reference photographs and extract only their photographic qualities: light quality, direction and softness, exposure, dynamic range, white balance, color grading, contrast, material realism and surface imperfection, reflections, atmosphere, depth of field, lens character and film or sensor grain. Render the Rhino scene with those qualities so the result reads as a real photograph of the same kind, not a CG image. Never copy their objects, architecture, furniture, people, text, composition, framing or camera. Geometry, camera, object count and material regions come only from the Rhino control images, and the material mapping still decides what each region is made of.";
+const STYLE_BLEND = " In this background blend the reference photograph still controls the appearance of the whole frame; use the style references only for the realism of the inserted object's materials.";
 export function imageGuide(data, channels=channelsFor(data)) {
-  const lines=channels.map((key,index)=>`Image ${index+1} (${key}): ${ROLES[key]||"additional visual reference; use only for the information visibly encoded in this image"}.`);
+  const lines=channels.map((key,index)=>`Image ${index+1} (${key}): ${key.startsWith(STYLE_PREFIX)?STYLE_ROLE:ROLES[key]||"additional visual reference; use only for the information visibly encoded in this image"}.`);
   if(channels.includes("scale_lock"))lines.unshift("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual object.");
   if(channels.includes("reference"))lines.unshift("MANDATORY REFERENCE APPEARANCE LOCK: reference alone controls the complete frame's color or monochrome mode, white balance, exposure, brightness, contrast, tonal range, colors and background. Never average, blend or transfer appearance from scale_lock, placement, masks, depth, normals, edges, shape_lock or material_id; they are technical data only.");
   const materials=String(data.prompts?.color_materials||"").trim();
@@ -66,6 +71,7 @@ export function imageGuide(data, channels=channelsFor(data)) {
   } else {
     lines.push("STANDARD RHINO SCENE MODE: use the complete Rhino camera view and the original scene-control behavior. Preserve the exact full-frame camera, composition, object count, silhouettes, openings, overlaps and relative scale shown by shape_lock and rendered. Use depth, edges, silhouette, normal and mask only as coordinated geometry evidence. Use material_id only to assign the requested materials to its flat-color regions. Do not apply any Wallpaper placement, reference-photo, inpaint, scale_lock or detail-crop rule in this mode.");
   }
+  if(channels.some(key=>key.startsWith(STYLE_PREFIX)))lines.push(STYLE_RULE+(channels.includes("reference")?STYLE_BLEND:""));
   if(placementConstraint)lines.push(placementConstraint);
   if(materials)lines.push("Material mapping for the material_id image:\n"+materials);
   if(userInstruction)lines.push("Rhino user instruction — follow this requested edit exactly:\n"+userInstruction);

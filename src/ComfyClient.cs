@@ -50,7 +50,7 @@ namespace RhinoAI
         public static string DescribeStatus(JObject status,string target)
         {
             if(status==null)return "The ComfyUI window has not loaded the sync extension";
-            if(((int?)status["version"]??0)<22)return "The ComfyUI sync extension is outdated: run install-comfy-extension.ps1 again, then press F5 in ComfyUI";
+            if(((int?)status["version"]??0)<24)return "The ComfyUI sync extension is outdated: run install-comfy-extension.ps1 again, then press F5 in ComfyUI";
             string active=(string)status["active"],state=(string)status["state"];
             string where=string.IsNullOrEmpty(active)?"ComfyUI shows an unsaved workflow":"ComfyUI shows "+active;
             if(state=="error")return where+" · sync failed: "+(string)status["message"];
@@ -62,7 +62,7 @@ namespace RhinoAI
         {
             using(var form=new MultipartFormDataContent())using(var stream=File.OpenRead(path))
             {
-                var bytes=new StreamContent(stream);bytes.Headers.ContentType=new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+                var bytes=new StreamContent(stream);bytes.Headers.ContentType=new System.Net.Http.Headers.MediaTypeHeaderValue(StyleReferences.Mime(path));
                 form.Add(bytes,"image",Path.GetFileName(path));form.Add(new StringContent("input"),"type");form.Add(new StringContent("false"),"overwrite");form.Add(new StringContent(folder),"subfolder");
                 JObject data=await Json(await client.PostAsync("upload/image",form));
                 string name=(string)data["name"],sub=(string)data["subfolder"];
@@ -147,8 +147,6 @@ namespace RhinoAI
         {
             if(string.IsNullOrWhiteSpace(config.Workflow))throw new InvalidOperationException("The ComfyUI engine needs an API workflow. Choose one on the Export settings page.");
             await Check();var template=JObject.Parse(File.ReadAllText(config.Workflow,Encoding.UTF8));var selected=SelectForBatch(export.Files,config);
-            // Style references bind to LoadImage nodes titled RHINO:style_reference_1 and so on.
-            foreach(var style in export.Files.Where(x=>x.Key.StartsWith(StyleReferences.Prefix)).OrderBy(x=>x.Key))if(selected.Count<14)selected[style.Key]=style.Value;
             string positive=(config.AiPrompt??"").Trim(),full=PromptGuide.Build(selected.Keys.ToList(),export,config);
             Bind(template,selected.ToDictionary(k=>k.Key,k=>Path.GetFileName(k.Value)),export,positive,full);
             var uploaded=new Dictionary<string,string>();string folder="rhino_ai/"+Path.GetFileName(export.Directory);
@@ -189,6 +187,8 @@ namespace RhinoAI
             var selected=new Dictionary<string,string>();foreach(var key in order)if(files.ContainsKey(key))selected[key]=files[key];
             if(selected.Count==0)foreach(var file in files.Take(14))selected[file.Key]=file.Value;
             if(selected.Count>14)throw new InvalidOperationException("More than 14 images selected. Multi-image models such as Nano Banana accept at most 14.");
+            // Style photos travel behind the controls, in the slots that are left.
+            foreach(var style in files.Where(x=>x.Key.StartsWith(StyleReferences.Prefix)).OrderBy(x=>x.Key))if(selected.Count<14)selected[style.Key]=style.Value;
             return selected;
         }
         public static JObject PreviewUi(Dictionary<string,string> images)

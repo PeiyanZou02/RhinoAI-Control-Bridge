@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.28.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.29.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -54,7 +54,7 @@ namespace RhinoAI
         readonly TextBox server=new TextBox(),output=new TextBox(),workflow=new TextBox(),wear=new TextBox(),occlusion=new TextBox();
         readonly ComboBox target=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly NumericUpDown edge=new NumericUpDown(),padding=new NumericUpDown();
-        readonly CheckBox selected=new CheckBox(),tryon=new CheckBox(),autoSync=new CheckBox(),detailPriority=new CheckBox(),adaptiveMask=new CheckBox(),wallpaperAspect=new CheckBox(),sceneAspect=new CheckBox();
+        readonly CheckBox selected=new CheckBox(),tryon=new CheckBox(),autoSync=new CheckBox(),syncStyle=new CheckBox(),detailPriority=new CheckBox(),adaptiveMask=new CheckBox(),wallpaperAspect=new CheckBox(),sceneAspect=new CheckBox();
         readonly ComboBox engine=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},model=new ComboBox(),aspect=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},resolution=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly TextBox apiKey=new TextBox{UseSystemPasswordChar=true},apiUrl=new TextBox(),aiPrompt=new TextBox(),aiOutput=new TextBox();
         readonly CheckedListBox views=new CheckedListBox(),channels=new CheckedListBox();
@@ -89,6 +89,7 @@ namespace RhinoAI
             Check(sceneAspect,"Lock widescreen frame 1024 × 589",config.LockSceneAspect,"Standard scenes use a fixed frame, so resizing the Rhino window does not change the output.");
             Check(selected,"Export selected objects only",config.SelectedOnly,"Recommended for background blend, so only the objects to insert are exported.");
             Check(autoSync,"Upload automatically when the scene changes",config.AutoSync,"Uploads images only. It never edits your prompt, starts a generation or switches the ComfyUI window.");
+            Check(syncStyle,"Send the style reference photos",config.SyncReferences,"Adds the photos listed under Style reference photos on the AI render page to the Batch Images, and tells the model to borrow only their look.");
             Check(tryon,"Blend into the Wallpaper background",config.ProductMode,"Uses the viewport Wallpaper photo as the base image and exports placement, masks and blend constraints for the Rhino objects.");
             Check(wallpaperAspect,"Match the Wallpaper aspect ratio",config.MatchWallpaperAspect,"Crops the empty viewport margins. Camera and perspective stay unchanged.");
             Check(detailPriority,"Detail priority",config.DetailPriority,"Adds magnified geometry images when the objects are small in the frame. At most 14 images.");
@@ -98,7 +99,7 @@ namespace RhinoAI
             var targetRow=Pair(new Field(target,34),Button("Refresh",async delegate{await RefreshWorkflows(false);}));
             Row(sync,"Target workflow",targetRow,"Update to ComfyUI switches ComfyUI to this file, then updates its Batch Images.");
             targetStatus.AutoSize=true;targetStatus.ForeColor=Theme.Muted;targetStatus.Font=Theme.Small();targetStatus.Margin=new Padding(Theme.S(2),Theme.S(2),0,Theme.S(18));targetStatus.Text=" ";Add(sync,targetStatus);
-            Add(sync,selected);Add(sync,autoSync);
+            Add(sync,selected);Add(sync,autoSync);Add(sync,syncStyle);
 
             var material=new TableLayoutPanel{ColumnCount=1,RowCount=2};material.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.Percent,100));
             var materialActions=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,Theme.S(10))};
@@ -270,7 +271,7 @@ namespace RhinoAI
         void Read()
         {
             layers.EndEdit();foreach(DataGridViewRow row in layers.Rows){var l=(LayerRule)row.Tag;l.Material=Convert.ToString(row.Cells[2].Value).Trim();if(string.IsNullOrWhiteSpace(l.Material))throw new ArgumentException("Enter a target material for layer: "+l.Name);}
-            config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.TargetWorkflow=SelectedTarget();config.LongEdge=(int)edge.Value;config.LockSceneAspect=sceneAspect.Checked;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.MatchWallpaperAspect=wallpaperAspect.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;
+            config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.TargetWorkflow=SelectedTarget();config.LongEdge=(int)edge.Value;config.LockSceneAspect=sceneAspect.Checked;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.MatchWallpaperAspect=wallpaperAspect.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;config.SyncReferences=syncStyle.Checked;
             StoreEngine();config.AiEngine=shown.Id;config.AiPrompt=aiPrompt.Text;config.AiOutput=aiOutput.Text.Trim();config.AiChannels=channels.CheckedItems.Cast<string>().ToList();config.AiViews=TickedViews();config.AiReferences=references.Items.Cast<string>().ToList();
         }
         void AddReferences()
@@ -401,7 +402,7 @@ namespace RhinoAI
         }
         string SyncSettingsSignature()
         {
-            return string.Join("|",new[]{server.Text,output.Text,workflow.Text,Convert.ToString(target.SelectedItem),edge.Value.ToString(),sceneAspect.Checked.ToString(),selected.Checked.ToString(),tryon.Checked.ToString(),wallpaperAspect.Checked.ToString(),detailPriority.Checked.ToString(),adaptiveMask.Checked.ToString(),wear.Text,padding.Value.ToString(),occlusion.Text,AutoSyncWatcher.FileStamp(occlusion.Text),string.Join(";",layers.Rows.Cast<DataGridViewRow>().Select(r=>string.Join("|",r.Cells.Cast<DataGridViewCell>().Select(c=>Convert.ToString(c.Value)))))});
+            return string.Join("|",new[]{server.Text,output.Text,workflow.Text,Convert.ToString(target.SelectedItem),edge.Value.ToString(),sceneAspect.Checked.ToString(),selected.Checked.ToString(),syncStyle.Checked.ToString(),string.Join(";",references.Items.Cast<string>().Select(p=>p+AutoSyncWatcher.FileStamp(p))),tryon.Checked.ToString(),wallpaperAspect.Checked.ToString(),detailPriority.Checked.ToString(),adaptiveMask.Checked.ToString(),wear.Text,padding.Value.ToString(),occlusion.Text,AutoSyncWatcher.FileStamp(occlusion.Text),string.Join(";",layers.Rows.Cast<DataGridViewRow>().Select(r=>string.Join("|",r.Cells.Cast<DataGridViewCell>().Select(c=>Convert.ToString(c.Value)))))});
         }
         async Task Export(bool send,bool automatic)
         {
@@ -411,6 +412,7 @@ namespace RhinoAI
                 Read();config.Save();Log("Reading viewport and geometry…");var snapshot=Exporter.Capture(doc,config);Log("Rendering "+snapshot.Camera.Width+" × "+snapshot.Camera.Height+" control images…");
                 last=await Task.Run(()=>Exporter.Render(snapshot,config,p=>{if(!IsDisposed)BeginInvoke((Action)(()=>progress.Value=p));}));
                 Log("Exported: "+last.Directory);foreach(var warning in last.Warnings)Log(warning);
+                if(config.SyncReferences){var skipped=new List<string>();StyleReferences.Prepare(last,config,skipped);foreach(var note in skipped)Log(note);}
                 if(send)
                 {
                     Log("Updating "+config.Server);

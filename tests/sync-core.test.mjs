@@ -110,6 +110,15 @@ assert(migrateBatchPrompt(graph,batch));assert.equal(generator.widgets[0].value,
 generator.widgets[0].value+='\nuser edit';assert.equal(migrateBatchPrompt(graph,batch),false);assert(generator.widgets[0].value.endsWith('user edit'));
 console.log('Channel removal verified: managed node deleted, seven inputs retained, color-guide instructions removed.');
 
+const styledData={schema:'rhino-ai-live/1',revision:'styled',images:{shape_lock:'rhino_ai/s/shape_lock.png',material_id:'rhino_ai/s/material_id.png',style_reference_1:'rhino_ai/s/style_reference_1.jpg',style_reference_2:'rhino_ai/s/style_reference_2.jpg'},prompts:{color_materials:'#112233 = oak'}};
+assert(validateManifest(styledData),'JPEG style references are valid manifest images');
+assert(!validateManifest({...styledData,images:{x:'rhino_ai/s/evil.exe'}}),'other file types stay rejected');
+assert.deepEqual(channelsFor(styledData),['shape_lock','material_id','style_reference_1','style_reference_2']);
+const styledGuide=imageGuide(styledData);
+assert(styledGuide.includes('Image 3 (style_reference_1): STYLE REFERENCE ONLY')&&styledGuide.includes('STYLE TRANSFER RULE')&&styledGuide.includes('Never copy their objects')&&!styledGuide.includes('In this background blend'));
+assert(imageGuide({...styledData,images:{...styledData.images,reference:'rhino_ai/s/reference.png'}}).includes('In this background blend'));
+assert(!imageGuide({...styledData,images:{shape_lock:'rhino_ai/s/shape_lock.png'}}).includes('STYLE TRANSFER RULE'));
+console.log('Style reference checks passed: JPEG manifest entries, channel order behind the controls, style-only prompt rule.');
 const sceneData={schema:'rhino-ai-live/1',revision:'scene',images:{shape_lock:'rhino_ai/scene/shape_lock.png',rendered:'rhino_ai/scene/rendered.png',depth:'rhino_ai/scene/depth.png',depth_inverse:'rhino_ai/scene/depth_inverse.png',edges:'rhino_ai/scene/edges.png',silhouette:'rhino_ai/scene/silhouette.png',normal:'rhino_ai/scene/normal.png',mask:'rhino_ai/scene/mask.png',material_id:'rhino_ai/scene/material_id.png'},prompts:{color_materials:'#112233 = metal',user_prompt:'',placement_constraint:''},input_profile:'scene'};
 const sceneGuide=imageGuide(sceneData,channelsFor(sceneData));assert(sceneGuide.includes('STANDARD RHINO SCENE MODE'));assert(sceneGuide.includes('original scene-control behavior'));assert(sceneGuide.includes('Do not apply any Wallpaper placement'));assert(!sceneGuide.includes('MANDATORY REFERENCE APPEARANCE LOCK'));assert(!sceneGuide.includes('Global-versus-detail rule'));
 console.log('Scene-mode isolation passed: legacy Rhino controls remain separate from Wallpaper placement rules.');
