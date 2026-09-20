@@ -23,6 +23,7 @@ namespace RhinoAI
     public sealed class ProviderSettings
     {
         public string BaseUrl="",Model="";
+        public string Aspect="auto",Resolution="auto"; // auto follows the exported frame
         public string Key=""; // protected by Secret, never the plain key
     }
     public sealed class AiImage
@@ -42,6 +43,28 @@ namespace RhinoAI
             new AiProvider{Id=Comfy,Name="ComfyUI (queue the API workflow)",BaseUrl="",KeyVariable="",Models=new string[0],MaxImages=14}
         };
         public static AiProvider Find(string id){return All.FirstOrDefault(p=>p.Id==id)??All[0];}
+        static readonly string[] Ratios={"auto","1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","21:9"};
+        // What each vendor and model really accepts. "auto" is always first and follows the exported frame.
+        public static string[] Aspects(AiProvider provider)
+        {
+            if(provider.Id==Comfy)return new string[0];
+            return provider.Id=="openai"?new[]{"auto","1:1","3:2","2:3"}:Ratios;
+        }
+        public static string[] Resolutions(AiProvider provider,string model)
+        {
+            model=(model??"").ToLowerInvariant();
+            if(provider.Id=="google")return model.Contains("gemini-3")?new[]{"auto","1K","2K","4K"}:new[]{"auto"}; // Gemini 2.5 image is fixed near 1K
+            if(provider.Id=="openai")return new[]{"auto","low","medium","high"}; // GPT Image sizes are fixed; this is its quality level
+            if(provider.Id=="doubao")return model.Contains("seedream-4-0")?new[]{"auto","1K","2K","4K"}:new[]{"auto","2K","4K"};
+            return new string[0];
+        }
+        public static string Pick(string[] options,string wanted){return options.Length==0?"":options.Contains(wanted)?wanted:options[0];}
+        // Pixel size with the area of a square of that resolution, the way Seedream defines 1K, 2K and 4K.
+        public static string PixelSize(string resolution,double ratio)
+        {
+            double edge=resolution=="1K"?1024:resolution=="4K"?4096:2048;ratio=Math.Max(1/16.0,Math.Min(16,ratio));
+            return (int)Math.Round(edge*Math.Sqrt(ratio))+"x"+(int)Math.Round(edge/Math.Sqrt(ratio));
+        }
     }
     // Keys rest in settings.json under Windows DPAPI, readable only by the same Windows user.
     public static class Secret
@@ -158,14 +181,16 @@ namespace RhinoAI
             if(string.IsNullOrWhiteSpace(key))throw new InvalidOperationException("Enter the "+provider.Name+" API key, or set the "+provider.KeyVariable+" environment variable.");
             string root=(string.IsNullOrWhiteSpace(settings.BaseUrl)?provider.BaseUrl:settings.BaseUrl).Trim().TrimEnd('/'),model=string.IsNullOrWhiteSpace(settings.Model)?provider.Models[0]:settings.Model.Trim();
             Uri uri;if(!Uri.TryCreate(root,UriKind.Absolute,out uri)||(uri.Scheme!="https"&&!uri.IsLoopback))throw new ArgumentException("The API address must start with https://. If you pasted the key there, move it to API key and clear the address to restore the default.");
+            string aspect=AiProviders.Pick(AiProviders.Aspects(provider),settings.Aspect),resolution=AiProviders.Pick(AiProviders.Resolutions(provider,model),settings.Resolution);
+            if(resolution=="auto"&&provider.Id!="openai")resolution=Math.Max(width,height)<=1024?"1K":Math.Max(width,height)<=2048?"2K":"4K";
             HttpRequestMessage request;
             if(provider.Id=="google")
             {
                 var parts=new JArray{new JObject{["text"]=prompt}};
                 for(int i=0;i<images.Count;i++){parts.Add(new JObject{["text"]=PromptGuide.Label(i,images[i].Key)+":"});parts.Add(new JObject{["inlineData"]=new JObject{["mimeType"]="image/png",["data"]=Convert.ToBase64String(File.ReadAllBytes(images[i].Value))}});}
-                var image=new JObject{["aspectRatio"]=NearestRatio(width,height)};
+                var image=new JObject{["aspectRatio"]=aspect=="auto"?NearestRatio(width,height):aspect};
                 // Only the Gemini 3 image models take an output size.
-                if(model.Contains("gemini-3"))image["imageSize"]=Math.Max(width,height)<=1024?"1K":Math.Max(width,height)<=2048?"2K":"4K";
+                if(model.ToLowerInvariant().Contains("gemini-3"))image["imageSize"]=resolution;
                 var body=new JObject{["contents"]=new JArray(new JObject{["role"]="user",["parts"]=parts}),["generationConfig"]=new JObject{["responseModalities"]=new JArray("TEXT","IMAGE"),["imageConfig"]=image}};
                 request=new HttpRequestMessage(HttpMethod.Post,root+"/models/"+Uri.EscapeDataString(model)+":generateContent"){Content=new StringContent(body.ToString(Formatting.None),Encoding.UTF8,"application/json")};
                 request.Headers.Add("x-goog-api-key",key.Trim());
@@ -173,14 +198,15 @@ namespace RhinoAI
             else if(provider.Id=="openai")
             {
                 var form=new MultipartFormDataContent();form.Add(new StringContent(model),"model");form.Add(new StringContent(prompt),"prompt");
-                form.Add(new StringContent(width>height*1.15?"1536x1024":height>width*1.15?"1024x1536":"1024x1024"),"size");
+                form.Add(new StringContent(aspect=="1:1"?"1024x1024":aspect=="3:2"?"1536x1024":aspect=="2:3"?"1024x1536":width>height*1.15?"1536x1024":height>width*1.15?"1024x1536":"1024x1024"),"size");
+                if(resolution!="auto")form.Add(new StringContent(resolution),"quality");
                 foreach(var item in images){var bytes=new ByteArrayContent(File.ReadAllBytes(item.Value));bytes.Headers.ContentType=new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");form.Add(bytes,"image[]",item.Key+".png");}
                 request=new HttpRequestMessage(HttpMethod.Post,root+"/images/edits"){Content=form};
                 request.Headers.Authorization=new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",key.Trim());
             }
             else if(provider.Id=="doubao")
             {
-                var body=new JObject{["model"]=model,["prompt"]=prompt,["image"]=new JArray(images.Select(x=>"data:image/png;base64,"+Convert.ToBase64String(File.ReadAllBytes(x.Value)))),["size"]=Math.Max(width,height)<=2048?"2K":"4K",["sequential_image_generation"]="disabled",["response_format"]="b64_json",["watermark"]=false};
+                var body=new JObject{["model"]=model,["prompt"]=prompt,["image"]=new JArray(images.Select(x=>"data:image/png;base64,"+Convert.ToBase64String(File.ReadAllBytes(x.Value)))),["size"]=AiProviders.PixelSize(AiProviders.Resolutions(provider,model).Contains(resolution)?resolution:"2K",aspect=="auto"?width/(double)Math.Max(1,height):double.Parse(aspect.Split(':')[0])/double.Parse(aspect.Split(':')[1])),["sequential_image_generation"]="disabled",["response_format"]="b64_json",["watermark"]=false};
                 request=new HttpRequestMessage(HttpMethod.Post,root+"/images/generations"){Content=new StringContent(body.ToString(Formatting.None),Encoding.UTF8,"application/json")};
                 request.Headers.Authorization=new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",key.Trim());
             }

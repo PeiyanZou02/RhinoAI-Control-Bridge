@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.26.3.0")]
+[assembly: System.Reflection.AssemblyVersion("0.27.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -55,7 +55,7 @@ namespace RhinoAI
         readonly ComboBox target=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly NumericUpDown edge=new NumericUpDown(),padding=new NumericUpDown();
         readonly CheckBox selected=new CheckBox(),tryon=new CheckBox(),autoSync=new CheckBox(),detailPriority=new CheckBox(),adaptiveMask=new CheckBox(),wallpaperAspect=new CheckBox(),sceneAspect=new CheckBox();
-        readonly ComboBox engine=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},model=new ComboBox();
+        readonly ComboBox engine=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},model=new ComboBox(),aspect=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},resolution=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly TextBox apiKey=new TextBox{UseSystemPasswordChar=true},apiUrl=new TextBox(),aiPrompt=new TextBox(),aiOutput=new TextBox();
         readonly CheckedListBox views=new CheckedListBox(),channels=new CheckedListBox();
         FlatButton renderButton,cancelButton;
@@ -126,6 +126,9 @@ namespace RhinoAI
             Row(ai,"Engine",new Field(engine,34),"The tool that renders the ticked views. A vendor API renders directly, without ComfyUI. The ComfyUI engine queues the API workflow from Export settings.");
             Row(ai,"API key",new Field(apiKey,34),"Saved encrypted for your Windows account and sent only to the API address below. Leave empty to use the vendor's environment variable, such as GEMINI_API_KEY.");
             Row(ai,"Model",new Field(model,34),"Pick a suggestion or type any image model the vendor offers.");
+            Row(ai,"Aspect ratio",new Field(aspect,34),"auto follows the exported frame. The list shows what the chosen engine accepts.");
+            Row(ai,"Resolution",new Field(resolution,34),"Output size. The choices follow the engine and model: Gemini 3 and Seedream take 1K, 2K or 4K, Gemini 2.5 is fixed, and GPT Image takes a quality level instead. auto follows Longest edge on the Export settings page.");
+            model.TextChanged+=(s,e)=>FillOptions(false);
             Row(ai,"API address",new Field(apiUrl,34),"Change only when you use a proxy or a compatible gateway.");
             foreach(var list in new[]{views,channels}){list.BorderStyle=BorderStyle.None;list.CheckOnClick=true;list.IntegralHeight=false;}
             channels.MultiColumn=true;channels.ColumnWidth=Theme.S(150);
@@ -279,6 +282,7 @@ namespace RhinoAI
             if(shown==null||shown.Id==AiProviders.Comfy)return;
             var settings=config.Provider(shown.Id);string key=apiKey.Text.Trim();
             if(key!=Secret.Reveal(settings.Key))settings.Key=Secret.Protect(key);
+            settings.Aspect=aspect.Text==""?"auto":aspect.Text;settings.Resolution=resolution.Text==""?"auto":resolution.Text;
             settings.Model=model.Text.Trim();settings.BaseUrl=apiUrl.Text.Trim()==shown.BaseUrl?"":apiUrl.Text.Trim();if(settings.BaseUrl=="")apiUrl.Text=shown.BaseUrl;
         }
         void ShowEngine()
@@ -286,6 +290,18 @@ namespace RhinoAI
             StoreEngine();shown=(AiProvider)engine.SelectedItem;bool api=shown.Id!=AiProviders.Comfy;var settings=api?config.Provider(shown.Id):new ProviderSettings();
             apiKey.Enabled=model.Enabled=apiUrl.Enabled=api;apiKey.Text=Secret.Reveal(settings.Key);apiUrl.Text=settings.BaseUrl==""?shown.BaseUrl:settings.BaseUrl;
             model.Items.Clear();model.Items.AddRange(shown.Models);model.Text=settings.Model==""?shown.Models.FirstOrDefault()??"":settings.Model;
+            FillOptions(true);
+        }
+        // Offer only what the chosen engine and model accept. A model change keeps the current choice when it is still valid.
+        void FillOptions(bool saved)
+        {
+            if(shown==null)return;var settings=shown.Id==AiProviders.Comfy?new ProviderSettings():config.Provider(shown.Id);
+            foreach(var pair in new[]{Tuple.Create(aspect,AiProviders.Aspects(shown),settings.Aspect),Tuple.Create(resolution,AiProviders.Resolutions(shown,model.Text),settings.Resolution)})
+            {
+                var box=pair.Item1;string wanted=saved||box.SelectedItem==null?pair.Item3:Convert.ToString(box.SelectedItem);
+                box.BeginUpdate();box.Items.Clear();box.Items.AddRange(pair.Item2);box.EndUpdate();box.Enabled=pair.Item2.Length>1;
+                if(pair.Item2.Length>0)box.SelectedItem=AiProviders.Pick(pair.Item2,wanted);
+            }
         }
         static string FileName(string text){var invalid=Path.GetInvalidFileNameChars();string clean=new string((text??"").Select(c=>invalid.Contains(c)?'_':c).ToArray()).Trim().TrimEnd('.');return clean==""?"view":clean;}
         async Task RenderViews()
