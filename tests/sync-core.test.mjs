@@ -99,7 +99,10 @@ assert.deepEqual(channelsFor(all),['shape_lock','rendered','depth','depth_invers
 const guide=imageGuide({...all,prompts:{positive_prompt:'Use the accompanying color-code image as a guide.\nGuide #4361EE / RGB(67, 97, 238) → layer [Metal] → gold'}},channelsFor(all));
 assert(!guide.includes('color-code'));assert(!guide.includes('Guide #'));assert(!guide.includes('[Metal] → gold'));assert(guide.includes('Image 9 (material_id):'));assert(guide.includes('front-to-back stacking relationship'));assert(guide.includes('let one material bleed across a boundary'));
 assert(imageGuide(data,['basecolor']).includes('Image 1 (basecolor):'));
-assert(imageGuide({...data,prompts:{color_materials:'#E63946 = glazed ceramic'}},['depth']).includes('Material mapping for the material_id image:\n#E63946 = glazed ceramic'));
+assert(imageGuide({...data,prompts:{color_materials:'#E63946 = glazed ceramic'}},['depth']).includes('it is never a color to paint:\n#E63946 = glazed ceramic'));
+assert(guide.includes('MANDATORY MATERIAL ID COLOR BAN')&&guide.includes('never purple wood')&&guide.includes('FINAL MATERIAL COLOR CHECK BEFORE OUTPUT')&&guide.includes('temporary CAD display colors'),'ID colors are banned as appearance whenever material_id is sent');
+assert(guide.indexOf('MANDATORY MATERIAL ID COLOR BAN')<guide.indexOf('Image 1 ('),'the ban comes before the image roles');
+assert(!imageGuide(data,['depth']).includes('MATERIAL ID COLOR BAN'));
 const manual='My lighting prompt\nColor code: blue = silver';
 const migrated=mergePrompt(manual+'\n[RHINO MATERIAL & IMAGE GUIDE]\nOld automatic material and style prompt\n[/RHINO MATERIAL & IMAGE GUIDE]', '#E63946 = ceramic');
 assert(migrated.startsWith('#E63946 = ceramic'));assert(!migrated.includes('Old automatic'));assert(migrated.endsWith(manual));

@@ -107,7 +107,7 @@ namespace RhinoAI
             {"edges_detail","high-resolution local hole, crease, thin-edge and internal part-boundary reference"},
             {"depth_detail","high-resolution local front-to-back order and relative depth reference"},
             {"shape_lock","PRIMARY geometry reference; preserve the exact object count, silhouette, openings, gaps, overlaps, part boundaries, proportions and camera"},
-            {"rendered","secondary surface-volume and curvature reference; do not copy its temporary white material, lighting or background"},
+            {"rendered","secondary surface-volume and curvature reference; do not copy its temporary CAD display colors, layer tints, white material, lighting or background"},
             {"placement","ABSOLUTE FULL-FRAME authority for final object position, pixel size, rotation and silhouette bounds. Copy the object at exactly the scale and location shown in this complete canvas; do not enlarge, shrink or move it based on any detail image"},
             {"scale_lock","TECHNICAL MEASUREMENT INPUT ONLY, never an appearance reference. Its magenta silhouette, bounding rectangle and center crosshair encode only the exact final object extrema and center on the complete canvas. Treat every magenta pixel and every thin box/crosshair line as invisible metadata. The final object must touch the same left/right/top/bottom bounds without exceeding them, but the output must contain none of these marks. Reconstruct clean photograph pixels behind the marks from reference and placement"},
             {"depth","front-to-back order and relative spatial-depth reference"},
@@ -121,6 +121,9 @@ namespace RhinoAI
             {"inpaint_mask","EDITABLE NEIGHBORHOOD reference; white marks where existing content may be removed and local pixels may be regenerated, while black must be preserved. The white region is NOT the new object silhouette or size: never scale the object to fill it; final object scale and bounds come only from the full-frame placement image"},
             {"occlusion_mask","occlusion-protection reference; white protected foreground pixels of the photograph must remain unchanged and stay in front where appropriate"}
         };
+        // Image models tend to read the ID colors as paint. Keep both texts in step with sync-core.mjs.
+        public const string MaterialIdBan="MANDATORY MATERIAL ID COLOR BAN: the flat colors in the material_id images are arbitrary index labels, like the numbers on a paint-by-number sheet. They carry ZERO information about the real color, hue, tint, paint, stain, dye, lighting or mood of any surface. The same label colors may also show through as CAD display tints in rendered, shape_lock or other technical images; there too they are labels, never appearance. It is strictly forbidden to reproduce, echo, tint toward or be influenced by any ID color anywhere in the final image, including floors, walls, furniture, backgrounds, reflections and light. A purple ID region mapped to plywood must look like natural plywood, never purple wood; a red ID region mapped to oak must look like natural oak, never red. The color of every surface comes only from the real-world appearance of its mapped target material, the written instructions and any style reference.";
+        public const string MaterialIdCheck="FINAL MATERIAL COLOR CHECK BEFORE OUTPUT: for every material region compare its final hue with its ID color. If they resemble each other and the mapped material would not naturally have that hue, the image is wrong: repaint that region in the natural color of its mapped material. No saturated ID color may survive in the output.";
         public static string Label(int index,string channel){return "Image "+(index+1)+" ("+channel+")";}
         // Images an engine receives, in prompt order. Background blend always sends its own fixed bundle.
         public static List<KeyValuePair<string,string>> Select(ExportResult export,Config config,int max,List<string> notes)
@@ -144,6 +147,8 @@ namespace RhinoAI
             var lines=new List<string>();string brief=(config.AiPrompt??"").Trim();
             if(brief!="")lines.Add("CREATIVE BRIEF — the look of the finished image:\n"+brief+"\n");
             lines.Add("Use the supplied input images according to the exact roles below.");
+            bool ids=channels.Any(c=>c.StartsWith("material_id"));
+            if(ids)lines.Add(MaterialIdBan);
             if(channels.Contains("reference"))lines.Add("MANDATORY REFERENCE APPEARANCE LOCK: reference alone controls the complete frame's color or monochrome mode, white balance, exposure, brightness, contrast, tonal range, colors and background. Never average, blend or transfer appearance from scale_lock, placement, masks, depth, normals, edges, shape_lock or material_id; they are technical data only.");
             if(channels.Contains("scale_lock"))lines.Add("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual object.");
             for(int i=0;i<channels.Count;i++){string role;if(channels[i].StartsWith(StyleReferences.Prefix)){lines.Add(Label(i,channels[i])+": "+StyleReferences.Role+".");continue;}lines.Add(Label(i,channels[i])+": "+(Roles.TryGetValue(channels[i],out role)?role:"additional visual reference; use only for the information visibly encoded in this image")+".");}
@@ -155,10 +160,11 @@ namespace RhinoAI
             else lines.Add("STANDARD RHINO SCENE MODE: preserve the exact full-frame camera, composition, object count, silhouettes, openings, overlaps and relative scale shown by the control images. Use depth, edges, silhouette, normal and mask only as coordinated geometry evidence. Use material_id only to assign the requested materials to its flat-color regions. The technical control images must never appear in the result.");
             if(channels.Any(c=>c.StartsWith(StyleReferences.Prefix)))lines.Add(StyleReferences.Rule+(channels.Contains("reference")?StyleReferences.BlendRule:""));
             if(!string.IsNullOrWhiteSpace(export.PlacementConstraint))lines.Add(export.PlacementConstraint.Trim());
-            if(!string.IsNullOrWhiteSpace(export.Prompt)&&channels.Any(c=>c.StartsWith("material_id")))lines.Add("Material mapping for the material_id image:\n"+export.Prompt.Trim());
+            if(!string.IsNullOrWhiteSpace(export.Prompt)&&channels.Any(c=>c.StartsWith("material_id")))lines.Add("Material mapping for the material_id image. Each hex value is only a lookup key that identifies a region; it is never a color to paint:\n"+export.Prompt.Trim());
             string instruction=config.ProductMode?(config.WearInstructions??"").Trim():"";
             if(instruction!="")lines.Add("Rhino user instruction — follow this requested edit exactly:\n"+instruction);
             if(channels.Contains("scale_lock"))lines.Add("FINAL VALIDATION BEFORE OUTPUT: inspect the completed image and remove every technical overlay originating from scale_lock. Compare every pixel outside the object edit region against reference and restore its original brightness, contrast, tonal range and color exactly.");
+            if(ids)lines.Add(MaterialIdCheck);
             lines.Add("Return exactly one finished image with the same framing and aspect ratio as the inputs.");
             return string.Join("\n",lines);
         }
