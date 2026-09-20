@@ -70,6 +70,8 @@ Restart ComfyUI after the first installation. When updating only the frontend fi
 
 Changing a product, camera, selection, or material mapping does not start generation. Click **Update to ComfyUI** again to publish a new input batch.
 
+Standard scene mode keeps the legacy nine-channel control stack and follows the active Rhino viewport aspect ratio. Wallpaper placement, reference-photo, scale-lock, detail-crop, and inpaint instructions are applied only when Wallpaper product mode is enabled.
+
 ## Wallpaper product placement
 
 1. Use Rhino's `Wallpaper` command to place the person, hand, neck, or product reference in the active viewport.
@@ -78,7 +80,7 @@ Changing a product, camera, selection, or material mapping does not start genera
 4. Enable Wallpaper product mode and enter the placement instruction.
 5. Export and update ComfyUI.
 
-The synchronized batch uses the full-frame reference and placement images as the authority for composition. `scale_lock.png` marks the exact product silhouette, bounding box, and center in that frame. Its magenta silhouette, rectangle, and crosshair are invisible measurement metadata and must never appear in the finished image. The generated prompt repeats this cleanup rule before and after the image-role instructions. Enlarged `*_detail` images provide geometry and material detail only; they must not change the final product's scale or position.
+The synchronized batch uses the full-frame reference and placement images as the authority for composition. The reference image is the sole authority for color or monochrome mode, exposure, contrast, tonal range, skin tone, and background. Technical controls must not tint or darken the result. `scale_lock.png` marks the exact product silhouette, bounding box, and center in that frame. Its background now preserves the reference tones; its magenta silhouette, rectangle, and crosshair are invisible measurement metadata and must never appear in the finished image. The generated prompt repeats these appearance and cleanup rules before and after the image-role instructions. Enlarged `*_detail` images provide geometry and material detail only; they must not change the final product's scale or position.
 
 Keep **Match Wallpaper source aspect** enabled to make a portrait reference produce a portrait output. The plug-in captures the complete Rhino view at a sufficient intermediate resolution, crops the matching camera sub-frustum, and applies that same portrait canvas to the reference, placement, rendered view, geometry controls, and masks. It does not stretch or rotate the photograph.
 

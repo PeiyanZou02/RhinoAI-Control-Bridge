@@ -11,7 +11,7 @@ using Rhino.Commands;
 using Rhino.PlugIns;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino AI Control Bridge")]
-[assembly: System.Reflection.AssemblyVersion("0.18.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.19.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
