@@ -85,15 +85,23 @@ namespace RhinoAI
             return new LayerRule{Id=layer.Id.ToString(),Index=layer.Index,Name=layer.FullPath,Color="",Material=mat,Description=desc};
         }
         static bool Has(string name,params string[] keys){return keys.Any(name.Contains);}
-        public static string Prompt(IEnumerable<LayerRule> layers,string style)
+        public static string Prompt(IEnumerable<LayerRule> layers,string style){return Prompt(layers,null as IDictionary<int,double>);}
+        // One line per visible layer, largest region first: hex, color name, share of the frame, layer name, material.
+        public static string Prompt(IEnumerable<LayerRule> layers,IDictionary<int,double> share)
         {
             var sb=new StringBuilder();
-            foreach(var layer in layers)
+            foreach(var layer in layers.Where(l=>!string.IsNullOrWhiteSpace(l.Material)).OrderByDescending(l=>Share(share,l)))
             {
-                if(!string.IsNullOrWhiteSpace(layer.Material))sb.AppendFormat("{0} = {1}\n",layer.Color.ToUpperInvariant(),layer.Material.Trim());
+                double part=Share(share,layer);string hex=layer.Color.ToUpperInvariant(),name="";
+                try{name=Raster.ColorName(Convert.ToInt32(hex.TrimStart('#'),16)).ToUpperInvariant();}catch(FormatException){}
+                sb.Append(hex);if(name!="")sb.Append(" — the "+name+" region");
+                if(part>0)sb.Append(", "+(part<0.01?"under 1":"about "+Math.Round(part*100))+"% of the frame");
+                if(!string.IsNullOrWhiteSpace(layer.Name))sb.Append(", Rhino layer \""+layer.Name.Replace("\"","'")+"\"");
+                sb.Append(" = "+layer.Material.Trim()+"\n");
             }
             return sb.ToString().TrimEnd();
         }
+        static double Share(IDictionary<int,double> share,LayerRule layer){double value;return share!=null&&share.TryGetValue(layer.Index+1,out value)?value:0;}
     }
     public sealed class Snapshot
     {
@@ -273,7 +281,8 @@ namespace RhinoAI
             var files=raster.Save(dir,snapshot.LayerColors);
             if(snapshot.Rendered!=null&&snapshot.Rendered.Length>0){string rendered=Path.Combine(dir,"rendered.png");File.WriteAllBytes(rendered,snapshot.Rendered);files["rendered"]=rendered;}
             var rules=config.Layers.Where(x=>visible.Contains(x.Index+1)).ToList();
-            string prompt=MaterialRules.Prompt(rules,null);
+            var share=raster.Materials.Where(x=>x>0).GroupBy(x=>x).ToDictionary(g=>g.Key,g=>g.Count()/(double)raster.Materials.Length);
+            string prompt=MaterialRules.Prompt(rules,share);
             string wear=null,placementConstraint=null;
             if(config.ProductMode)wear=ProductExport.Save(snapshot,raster,config,dir,files,out placementConstraint);
             File.WriteAllText(Path.Combine(dir,"material_prompt.txt"),prompt,Encoding.UTF8);
