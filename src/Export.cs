@@ -37,7 +37,8 @@ namespace RhinoAI
         public string WearInstructions="Blend the Rhino objects into the background photograph at the exact projected location, scale and orientation. Match the photograph's lighting direction, perspective, color and grain. Add natural contact shadows and reflections. Let foreground elements of the photograph occlude the objects where physically appropriate. Keep everything outside the edit region unchanged.";
         public int MaskPadding=12;
         public string OcclusionMask="";
-        public int LongEdge=1024;
+        public int LongEdge=2048;
+        public int SettingsVersion=0;
         public string Style="Photorealistic visualization, physically plausible materials, soft natural lighting, accurate scale, balanced exposure, fine surface detail. Preserve the supplied design.";
         public List<LayerRule> Layers=new List<LayerRule>();
         // AI render page. Lists start null because Json.NET appends saved items to a non-empty default.
@@ -49,7 +50,9 @@ namespace RhinoAI
         public ProviderSettings Provider(string id){ProviderSettings found;if(!AiProviders.TryGetValue(id,out found)){found=new ProviderSettings();AiProviders[id]=found;}return found;}
         public static string Root {get{var location=typeof(Config).Assembly.Location;return !string.IsNullOrEmpty(location)?Path.GetDirectoryName(location):(System.Environment.GetEnvironmentVariable("RHINO_AI_HOME")??AppDomain.CurrentDomain.BaseDirectory);}}
         public static string PathName {get{return Path.Combine(Root,"settings.json");}}
-        public static Config Load(){return File.Exists(PathName)?JsonConvert.DeserializeObject<Config>(File.ReadAllText(PathName,Encoding.UTF8)):new Config();}
+        public static Config Load(){var config=File.Exists(PathName)?JsonConvert.DeserializeObject<Config>(File.ReadAllText(PathName,Encoding.UTF8)):new Config();config.Migrate();return config;}
+        // Version 1: control images were soft at the old 1024 default, so saved settings still on it move to 2048 once.
+        public void Migrate(){if(SettingsVersion<1){if(LongEdge==1024)LongEdge=2048;SettingsVersion=1;}}
         public void Save(){File.WriteAllText(PathName,JsonConvert.SerializeObject(this,Formatting.Indented),Encoding.UTF8);}
         public void Scan(RhinoDoc doc)
         {
