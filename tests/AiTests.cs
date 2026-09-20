@@ -116,6 +116,23 @@ namespace RhinoAI
 
             check(AiClient.NearestRatio(683,1024)=="2:3"&&AiClient.NearestRatio(1000,1000)=="1:1","nearest supported aspect ratio");
 
+            // A 20 px square on a 64 px canvas: every outline must be a single pixel wide.
+            var raster=new Raster(new Camera{Width=64,Height=64,Left=-1,Right=1,Bottom=-1,Top=1,Near=1,Far=20,Perspective=false});
+            Func<double,double,Vertex> at=(x,y)=>new Vertex{X=x,Y=y,Z=5,NZ=1};
+            raster.Draw(new Triangle{A=at(-0.3125,-0.3125),B=at(0.3125,-0.3125),C=at(0.3125,0.3125),ObjectId=1,LayerId=1,MaterialId=1,BaseColor=0x999999});
+            raster.Draw(new Triangle{A=at(-0.3125,-0.3125),B=at(0.3125,0.3125),C=at(-0.3125,0.3125),ObjectId=1,LayerId=1,MaterialId=1,BaseColor=0x999999});
+            var maps=raster.Save(Path.Combine(root,"raster"),new Dictionary<int,int>{{1,0xff0000}});
+            using(var edges=new System.Drawing.Bitmap(maps["edges"]))using(var shape=new System.Drawing.Bitmap(maps["shape_lock"]))using(var mask=new System.Drawing.Bitmap(maps["mask"]))
+            {
+                int run=0,widest=0,dark=0,outside=0;
+                for(int x=0;x<64;x++){if(edges.GetPixel(x,32).R>0){run++;widest=Math.Max(widest,run);}else run=0;if(shape.GetPixel(x,32).R<0x40)dark++;if(edges.GetPixel(x,32).R>0&&mask.GetPixel(x,32).R==0)outside++;}
+                check(widest==1&&dark==2,"edges and shape_lock outlines are one pixel wide at 64 px");
+                check(outside==0,"outline pixels stay on the object, so the silhouette is not enlarged");
+            }
+            check(Raster.LineWeight(1024,589)==1&&Raster.LineWeight(2048,1178)==1&&Raster.LineWeight(4096,2356)==3,"line weight grows only at very large sizes");
+            var old=Newtonsoft.Json.JsonConvert.DeserializeObject<Config>("{\"LongEdge\":1024}");old.Migrate();var kept=Newtonsoft.Json.JsonConvert.DeserializeObject<Config>("{\"LongEdge\":1024,\"SettingsVersion\":1}");kept.Migrate();
+            check(old.LongEdge==2048&&kept.LongEdge==1024&&new Config().LongEdge==2048,"old default size moves to 2048 once and a later manual 1024 is kept");
+
             string workflow=Path.Combine(root,"job.api.json");
             File.WriteAllText(workflow,"{\"1\":{\"class_type\":\"LoadImage\",\"inputs\":{\"image\":\"x.png\"},\"_meta\":{\"title\":\"RHINO:depth\"}},\"2\":{\"class_type\":\"Text\",\"inputs\":{\"a\":\"{{positive_prompt}}\",\"b\":\"{{full_prompt}}\"}}}");
             int polls=0;JObject queued=null;

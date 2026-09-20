@@ -146,6 +146,12 @@ For the ComfyUI engine, the API workflow can use `{{positive_prompt}}` for your 
 
 Vendor APIs are billed by the vendor per generated image.
 
+### Image size and line weight
+
+**Longest edge** on the Export settings page sets the size of every control image and defaults to 2048 px. The locked widescreen frame keeps the 1024 : 589 ratio at any size, so 2048 exports 2048 × 1178. Settings saved with the old 1024 default move to 2048 once; a value you set yourself afterwards is kept.
+
+`edges`, `silhouette`, `lineart` and the ink lines of `shape_lock` are one pixel wide, drawn on the surface in front, so thin parts such as chair legs and slats stay separate instead of merging. Above roughly 2300 px the lines widen to two and then three pixels so they survive the model's own downscaling.
+
 ## Background blend
 
 1. Use Rhino's `Wallpaper` command to place the background photograph, such as a site, street, interior or portrait, in the active viewport.
