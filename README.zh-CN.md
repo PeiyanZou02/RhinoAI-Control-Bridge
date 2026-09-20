@@ -4,7 +4,7 @@
 
 这是一个面向 Rhino 8 和 ComfyUI 的本地控制图桥接插件。它把 Rhino 当前视角导出为深度、法线、轮廓、材质分区、形状锁定、Wallpaper 定位及蒙版等图片，并自动更新到 ComfyUI 中指定的 **Batch Images** 节点。
 
-插件只更新图片和输入说明，不会点击 Run、提交 Prompt 或加入生成队列。最终生成始终由用户在 ComfyUI 中手动启动。
+同步功能只更新图片和输入说明，不会点击 Run、提交 Prompt 或加入生成队列。只有你主动启动时才会生成：在 ComfyUI 中点击 Run，或在 **AI render** 页面点击 **Render ticked views**——后者用厂商 API 直接渲染 Rhino 已命名视图，不需要 ComfyUI。
 
 ## 主要功能
 
@@ -59,11 +59,12 @@
 
 ## 面板
 
-运行 `Rhino2Comfy` 打开面板。面板为英文界面，包含四个页面和一条操作栏。
+运行 `Rhino2Comfy` 打开面板。面板为英文界面，包含五个页面和一条操作栏。
 
 | 页面 | 内容 |
 | --- | --- |
 | **Sync** | 目标工作流、ComfyUI 实时状态行、仅导出选中对象、自动上传 |
+| **AI render** | 引擎与 API Key、要渲染的已命名视图、要发送的控制图、提示词和渲染输出目录 |
 | **Layer materials** | 每个 Rhino 图层一行，显示编码色，并填写目标材质 |
 | **Background blend** | 把 Rhino 对象融合进视口 Wallpaper 背景照片 |
 | **Export settings** | ComfyUI 地址、导出目录、可选的 API 工作流、输出尺寸和固定宽屏画幅 |
@@ -99,6 +100,68 @@
 更换模型、视角、选择或材质后不会自动生成。再次点击 **Update to ComfyUI** 即可发布新的输入图片。
 
 普通场景模式保持原来的 9 张控制图，并默认开启**Lock widescreen frame 1024 × 589**。调整 Rhino 窗口、打开侧边栏或移动插件窗口都不会再把输出变成正方形；插件会对所有控制图使用同一个相机子视锥，Perspective 保持一致。只有开启 Wallpaper 产品佩戴模式时，才会使用参考底图、placement、scale-lock、局部放大和 inpaint 规则。
+
+## AI 渲染：不经过 ComfyUI 批量渲染已命名视图
+
+ComfyUI 的生图节点本质上是对厂商 API 的封装。只要有自己的 API Key，**AI render** 页面就能直接调用厂商接口，并把结果保存到本地目录。
+
+1. 用 Rhino 的 `NamedView` 命令保存需要的相机视角。
+2. 在 **AI render** 页面选择 **Engine**（引擎）：
+
+| 引擎 | 调用的接口 | Key 环境变量 |
+| --- | --- | --- |
+| Google Gemini (Nano Banana) | `models/<model>:generateContent` | `GEMINI_API_KEY` |
+| OpenAI (GPT Image) | `images/edits` | `OPENAI_API_KEY` |
+| Volcengine Doubao (Seedream，火山引擎豆包) | `images/generations` | `ARK_API_KEY` |
+| ComfyUI | 把 Export settings 中的 **API workflow** 加入队列，并下载它保存的图片 | 无 |
+
+3. 粘贴 API Key；留空则读取对应的环境变量。每个引擎各自保存 Key、模型和地址。模型列表可以直接输入，方便使用更新的模型。只有使用代理或兼容网关时才需要改 API address。
+4. 选择 **Aspect ratio**（画幅比例）和 **Resolution**（分辨率）。`auto` 跟随导出画幅和 Longest edge 设置。下拉列表只显示当前引擎和模型实际支持的选项：
+
+| 引擎 | 画幅比例 | 分辨率 |
+| --- | --- | --- |
+| Gemini 3 图像模型 | 1:1、2:3、3:2、3:4、4:3、4:5、5:4、9:16、16:9、21:9 | 1K、2K、4K |
+| Gemini 2.5 Flash Image | 同上 | 由模型固定 |
+| OpenAI GPT Image | 1:1、3:2、2:3（固定尺寸） | 质量：low、medium、high |
+| 豆包 Seedream 4.0 / 4.5 | 与 Gemini 相同，按像素尺寸发送 | 1K（仅 4.0）、2K、4K |
+
+   厂商只支持这些固定比例，所以 AI render 会直接按引擎将要使用的比例导出 Rhino 画幅，而不是用保存的宽屏画幅。`auto` 时取最接近的支持比例：默认的 1024 : 589 在 Gemini 下变成 16:9，在 GPT Image 下变成 3:2。相机、镜头和透视不变，只改变画幅的裁切，并且只对这一次渲染生效。厂商返回的取整画布（例如 2752 × 1536）会被两侧均匀裁掉多余部分，保存的结果与导出比例完全一致。Seedream 接受任意像素尺寸，无需调整。背景图融合模式保持 Wallpaper 的比例。
+
+5. 勾选要渲染的已命名视图。**(Current viewport)** 表示按当前视角渲染。**Reload views** 重新读取 Rhino 中的视图列表。
+6. 勾选要发送的控制图，填写提示词，并选择 **Render folder**（输出目录）。
+7. 点击 **Render ticked views**。插件会依次在当前视口恢复每个视图、导出控制图，连同提示词、图片角色说明和图层材质映射一起发送，并保存为 `<视图名>_<时间>.png`。全部完成后恢复原来的视角。**Cancel** 会中止当前请求并停止批处理；某个视图失败会记录在日志里，其余视图继续。
+
+### 风格参考图（Style reference photos）
+
+在 **Style reference photos** 里最多添加 4 张真实照片，让结果更像照片。它们会跟在控制图后面随每个视图一起发送，并附带说明：只借用照片的“观感”——光线质感、曝光、调色、材质真实感、氛围、景深和镜头特征。几何、相机和材质分区仍然只来自 Rhino 控制图，所以参考图不会改动你的设计。
+
+- 选择与目标效果题材、光线接近的照片，例如建筑用建筑摄影，产品用棚拍产品图。一两张风格一致的照片比四张不同风格的效果好。
+- 照片会复制到每次导出目录，命名为 `style_reference_N.jpg`，自动转正并缩小到最长边 1536 px；原图不会被改动，请求体积也保持较小。
+- 支持 JPG、PNG、BMP。找不到的文件会在日志里提示并跳过。
+- 在 ComfyUI 工作流里同样可用。**Sync** 页面勾选 **Send the style reference photos** 后，**Update to ComfyUI** 会把它们排在控制图后面一起上传，以 `RHINO:style_reference_1` 等节点接入 Batch Images，并在托管提示词里写入同一条“只借用风格”的规则。如果一批已经有 14 张图，参考图会被省略。需要同步扩展版本 24：重新运行 `install-comfy-extension.ps1`，重启 ComfyUI 并按 **F5**。
+- AI render 使用 ComfyUI 引擎时同样会上传，并绑定到这些标题的 `LoadImage` 节点。
+- 在背景图融合模式下，Wallpaper 照片仍然决定整幅画面的观感，风格参考图只影响插入物体材质的真实感。
+
+每个视图实际发送的提示词保存在该视图导出目录的 `ai_prompt.txt`。最长边、锁定宽屏画幅、仅导出选中对象、背景图融合等导出选项对每个视图同样生效。背景图融合模式固定发送自己的参考图、定位图和蒙版。
+
+使用 ComfyUI 引擎时，API 工作流里除了原有的 `RHINO:<通道>` 图片节点，还可以用 `{{positive_prompt}}` 代表你的提示词，用 `{{full_prompt}}` 代表带图片角色和材质映射的完整提示词。
+
+厂商 API 按生成张数由厂商计费。
+
+### 画幅比例（Frame ratio）
+
+Nano Banana 这类图像模型只支持几种固定比例：1:1、2:3、3:2、3:4、4:3、4:5、5:4、9:16、16:9、21:9。其他比例的画幅（包括 1024 × 589 宽屏画幅）会让模型拉伸或重新构图。所以 Export settings 页面的 **Frame ratio** 默认是 **auto**，按最接近的支持比例导出：宽屏画幅变成 16:9，2048 px 时导出 2048 × 1152。它对 **Update to ComfyUI**、**Export only** 和 `Rhino2ComfyExport` 都生效。相机、镜头和透视不变，只改变画幅的裁切。
+
+- 把 ComfyUI 里模型节点的比例设成同一个，或者设成 `auto`。
+- 选择某个固定比例可以强制使用它；选 **Locked frame or viewport, unchanged** 则恢复以前的行为。
+- AI render 优先使用所选引擎自己的比例；引擎接受任意尺寸时才回退到这个设置。
+- 背景图融合模式保持 Wallpaper 的比例。
+
+### 图片尺寸与线宽
+
+Export settings 页面的 **Longest edge** 决定所有控制图的尺寸，默认 2048 px。锁定宽屏画幅在任何尺寸下都保持 1024 : 589 的比例，所以 2048 导出的是 2048 × 1178。以前按旧默认值 1024 保存的设置会自动改为 2048 一次；之后你自己设定的数值会保留。
+
+`edges`、`silhouette`、`lineart` 以及 `shape_lock` 的墨线都是 1 像素宽，并画在靠前的那个表面上，椅子腿、板条这类细小构件不会再粘成一团。超过约 2300 px 时线宽会增加到 2、3 像素，避免被模型自身的缩放抹掉。
 
 ## 背景图融合（Background blend）
 
@@ -164,8 +227,8 @@ dist/       最新预编译 Rhino 插件
 
 ## 隐私与限制
 
-- 图片只发送到面板中配置的 ComfyUI 地址。
-- 插件不读取或传输 API Key。
+- 同步功能只把图片发送到面板中配置的 ComfyUI 地址，不会发送任何 API Key。
+- AI 渲染只在你点击 **Render ticked views** 时，把勾选的控制图和提示词发送到该页面显示的 API 地址。API Key 用 Windows DPAPI 按当前 Windows 账户加密后保存在本机 `settings.json`，只通过 HTTPS 请求头发送，不会写入日志或导出目录。
 - 导出图片、本机设置和测试输出不会提交到 Git。
 - Nano Banana 等参考图模型仍属于生成式模型。Scale Lock 和图片职责能提高一致性，但不等于 ControlNet 的数学像素锁定。
 - 当前几何控制图把透明表面视为不透明；不会把贴图、AO、roughness、metalness、displacement、剖切平面或未烘焙 Grasshopper 预览作为原生渲染通道导出。

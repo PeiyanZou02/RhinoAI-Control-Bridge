@@ -65,7 +65,7 @@ function showStatus(text,error=false) {
   if(statusButton){statusButton.textContent=text;statusButton.style.borderColor=error?"#e56767":"#42b99d";}
 }
 async function report(state,detail={}) {
-  const payload={schema:"rhino-ai-frontend/1",version:23,state,active:workflowName(activePath())||null,open:(workflows()?.openWorkflows||[]).map(w=>workflowName(w.path)),...detail};
+  const payload={schema:"rhino-ai-frontend/1",version:27,state,active:workflowName(activePath())||null,open:(workflows()?.openWorkflows||[]).map(w=>workflowName(w.path)),...detail};
   const serialized=JSON.stringify(payload);if(serialized===lastReport)return;
   try {const result=await api.fetchApi("/userdata/rhino_ai_frontend_status.json?overwrite=true",{method:"POST",headers:{"Content-Type":"application/json"},body:serialized});if(result.ok)lastReport=serialized;}catch{}
 }

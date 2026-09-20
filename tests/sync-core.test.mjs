@@ -99,7 +99,15 @@ assert.deepEqual(channelsFor(all),['shape_lock','rendered','depth','depth_invers
 const guide=imageGuide({...all,prompts:{positive_prompt:'Use the accompanying color-code image as a guide.\nGuide #4361EE / RGB(67, 97, 238) → layer [Metal] → gold'}},channelsFor(all));
 assert(!guide.includes('color-code'));assert(!guide.includes('Guide #'));assert(!guide.includes('[Metal] → gold'));assert(guide.includes('Image 9 (material_id):'));assert(guide.includes('front-to-back stacking relationship'));assert(guide.includes('let one material bleed across a boundary'));
 assert(imageGuide(data,['basecolor']).includes('Image 1 (basecolor):'));
-assert(imageGuide({...data,prompts:{color_materials:'#E63946 = glazed ceramic'}},['depth']).includes('Material mapping for the material_id image:\n#E63946 = glazed ceramic'));
+assert(imageGuide({...data,prompts:{color_materials:'#E63946 = glazed ceramic'}},['depth']).includes('it is never a color to paint:\n#E63946 = glazed ceramic'));
+assert(guide.includes('MANDATORY MATERIAL ID COLOR BAN')&&guide.includes('never purple wood')&&guide.includes('FINAL MATERIAL COLOR CHECK BEFORE OUTPUT')&&guide.includes('temporary CAD display colors'),'ID colors are banned as appearance whenever material_id is sent');
+assert(guide.indexOf('MANDATORY MATERIAL ID COLOR BAN')<guide.indexOf('Image 1 ('),'the ban comes before the image roles');
+assert(!imageGuide(data,['depth']).includes('MATERIAL ID COLOR BAN'));
+assert(imageGuide({...data,prompts:{color_materials:'#E63946 = glazed ceramic'}},['material_id']).includes('MATERIAL ASSIGNMENT RULE')&&!guide.includes('MATERIAL ASSIGNMENT RULE'),'the assignment rule follows the mapping and is absent without one');
+assert(guide.includes('MANDATORY CAMERA AND COMPOSITION LOCK')&&guide.includes('Use the rendered image as the base canvas')&&guide.includes('no base, plinth, pedestal')&&guide.includes('FINAL CAMERA CHECK BEFORE OUTPUT'),'scene mode locks the camera and frames the task as an edit');
+assert(guide.indexOf('CAMERA AND COMPOSITION LOCK')<guide.indexOf('MATERIAL ID COLOR BAN'),'the camera lock leads the guide');
+assert(imageGuide(data,['shape_lock']).includes('Use the shape_lock image as the base canvas'));
+assert(!imageGuide(data,['reference','placement']).includes('CAMERA AND COMPOSITION LOCK'),'background blend keeps its own placement lock');
 const manual='My lighting prompt\nColor code: blue = silver';
 const migrated=mergePrompt(manual+'\n[RHINO MATERIAL & IMAGE GUIDE]\nOld automatic material and style prompt\n[/RHINO MATERIAL & IMAGE GUIDE]', '#E63946 = ceramic');
 assert(migrated.startsWith('#E63946 = ceramic'));assert(!migrated.includes('Old automatic'));assert(migrated.endsWith(manual));
@@ -110,6 +118,15 @@ assert(migrateBatchPrompt(graph,batch));assert.equal(generator.widgets[0].value,
 generator.widgets[0].value+='\nuser edit';assert.equal(migrateBatchPrompt(graph,batch),false);assert(generator.widgets[0].value.endsWith('user edit'));
 console.log('Channel removal verified: managed node deleted, seven inputs retained, color-guide instructions removed.');
 
+const styledData={schema:'rhino-ai-live/1',revision:'styled',images:{shape_lock:'rhino_ai/s/shape_lock.png',material_id:'rhino_ai/s/material_id.png',style_reference_1:'rhino_ai/s/style_reference_1.jpg',style_reference_2:'rhino_ai/s/style_reference_2.jpg'},prompts:{color_materials:'#112233 = oak'}};
+assert(validateManifest(styledData),'JPEG style references are valid manifest images');
+assert(!validateManifest({...styledData,images:{x:'rhino_ai/s/evil.exe'}}),'other file types stay rejected');
+assert.deepEqual(channelsFor(styledData),['shape_lock','material_id','style_reference_1','style_reference_2']);
+const styledGuide=imageGuide(styledData);
+assert(styledGuide.includes('Image 3 (style_reference_1): STYLE REFERENCE ONLY')&&styledGuide.includes('STYLE TRANSFER RULE')&&styledGuide.includes('Never copy their objects')&&!styledGuide.includes('In this background blend'));
+assert(imageGuide({...styledData,images:{...styledData.images,reference:'rhino_ai/s/reference.png'}}).includes('In this background blend'));
+assert(!imageGuide({...styledData,images:{shape_lock:'rhino_ai/s/shape_lock.png'}}).includes('STYLE TRANSFER RULE'));
+console.log('Style reference checks passed: JPEG manifest entries, channel order behind the controls, style-only prompt rule.');
 const sceneData={schema:'rhino-ai-live/1',revision:'scene',images:{shape_lock:'rhino_ai/scene/shape_lock.png',rendered:'rhino_ai/scene/rendered.png',depth:'rhino_ai/scene/depth.png',depth_inverse:'rhino_ai/scene/depth_inverse.png',edges:'rhino_ai/scene/edges.png',silhouette:'rhino_ai/scene/silhouette.png',normal:'rhino_ai/scene/normal.png',mask:'rhino_ai/scene/mask.png',material_id:'rhino_ai/scene/material_id.png'},prompts:{color_materials:'#112233 = metal',user_prompt:'',placement_constraint:''},input_profile:'scene'};
 const sceneGuide=imageGuide(sceneData,channelsFor(sceneData));assert(sceneGuide.includes('STANDARD RHINO SCENE MODE'));assert(sceneGuide.includes('original scene-control behavior'));assert(sceneGuide.includes('Do not apply any Wallpaper placement'));assert(!sceneGuide.includes('MANDATORY REFERENCE APPEARANCE LOCK'));assert(!sceneGuide.includes('Global-versus-detail rule'));
 console.log('Scene-mode isolation passed: legacy Rhino controls remain separate from Wallpaper placement rules.');

@@ -30,18 +30,31 @@ namespace RhinoAI
         public bool MatchWallpaperAspect=true;
         public bool LockSceneAspect=true;
         public int SceneAspectWidth=1024,SceneAspectHeight=589;
+        // "auto" = nearest ratio image models draw, "frame" = the locked frame or viewport as it is, or a ratio such as "16:9".
+        public string FrameRatio="auto";
         public bool DetailPriority=true;
         public bool AutoEditRegion=true;
         public bool AutoSync=false;
+        public bool SyncReferences=true; // send the AI render style photos with Update to ComfyUI too
         public string WearInstructions="Blend the Rhino objects into the background photograph at the exact projected location, scale and orientation. Match the photograph's lighting direction, perspective, color and grain. Add natural contact shadows and reflections. Let foreground elements of the photograph occlude the objects where physically appropriate. Keep everything outside the edit region unchanged.";
         public int MaskPadding=12;
         public string OcclusionMask="";
-        public int LongEdge=1024;
+        public int LongEdge=2048;
+        public int SettingsVersion=0;
         public string Style="Photorealistic visualization, physically plausible materials, soft natural lighting, accurate scale, balanced exposure, fine surface detail. Preserve the supplied design.";
         public List<LayerRule> Layers=new List<LayerRule>();
+        // AI render page. Lists start null because Json.NET appends saved items to a non-empty default.
+        public string AiEngine="google";
+        public string AiOutput=Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),"RhinoAI Renders");
+        public string AiPrompt="Photorealistic visualization, physically plausible materials, soft natural lighting, accurate scale, balanced exposure, fine surface detail. Preserve the supplied design.";
+        public List<string> AiChannels,AiViews,AiReferences; // AiReferences: local photos whose look the render should borrow
+        public Dictionary<string,ProviderSettings> AiProviders=new Dictionary<string,ProviderSettings>();
+        public ProviderSettings Provider(string id){ProviderSettings found;if(!AiProviders.TryGetValue(id,out found)){found=new ProviderSettings();AiProviders[id]=found;}return found;}
         public static string Root {get{var location=typeof(Config).Assembly.Location;return !string.IsNullOrEmpty(location)?Path.GetDirectoryName(location):(System.Environment.GetEnvironmentVariable("RHINO_AI_HOME")??AppDomain.CurrentDomain.BaseDirectory);}}
         public static string PathName {get{return Path.Combine(Root,"settings.json");}}
-        public static Config Load(){return File.Exists(PathName)?JsonConvert.DeserializeObject<Config>(File.ReadAllText(PathName,Encoding.UTF8)):new Config();}
+        public static Config Load(){var config=File.Exists(PathName)?JsonConvert.DeserializeObject<Config>(File.ReadAllText(PathName,Encoding.UTF8)):new Config();config.Migrate();return config;}
+        // Version 1: control images were soft at the old 1024 default, so saved settings still on it move to 2048 once.
+        public void Migrate(){if(SettingsVersion<1){if(LongEdge==1024)LongEdge=2048;SettingsVersion=1;}}
         public void Save(){File.WriteAllText(PathName,JsonConvert.SerializeObject(this,Formatting.Indented),Encoding.UTF8);}
         public void Scan(RhinoDoc doc)
         {
@@ -74,15 +87,23 @@ namespace RhinoAI
             return new LayerRule{Id=layer.Id.ToString(),Index=layer.Index,Name=layer.FullPath,Color="",Material=mat,Description=desc};
         }
         static bool Has(string name,params string[] keys){return keys.Any(name.Contains);}
-        public static string Prompt(IEnumerable<LayerRule> layers,string style)
+        public static string Prompt(IEnumerable<LayerRule> layers,string style){return Prompt(layers,null as IDictionary<int,double>);}
+        // One line per visible layer, largest region first: hex, color name, share of the frame, layer name, material.
+        public static string Prompt(IEnumerable<LayerRule> layers,IDictionary<int,double> share)
         {
             var sb=new StringBuilder();
-            foreach(var layer in layers)
+            foreach(var layer in layers.Where(l=>!string.IsNullOrWhiteSpace(l.Material)).OrderByDescending(l=>Share(share,l)))
             {
-                if(!string.IsNullOrWhiteSpace(layer.Material))sb.AppendFormat("{0} = {1}\n",layer.Color.ToUpperInvariant(),layer.Material.Trim());
+                double part=Share(share,layer);string hex=layer.Color.ToUpperInvariant(),name="";
+                try{name=Raster.ColorName(Convert.ToInt32(hex.TrimStart('#'),16)).ToUpperInvariant();}catch(FormatException){}
+                sb.Append(hex);if(name!="")sb.Append(" — the "+name+" region");
+                if(part>0)sb.Append(", "+(part<0.01?"under 1":"about "+Math.Round(part*100))+"% of the frame");
+                if(!string.IsNullOrWhiteSpace(layer.Name))sb.Append(", Rhino layer \""+layer.Name.Replace("\"","'")+"\"");
+                sb.Append(" = "+layer.Material.Trim()+"\n");
             }
             return sb.ToString().TrimEnd();
         }
+        static double Share(IDictionary<int,double> share,LayerRule layer){double value;return share!=null&&share.TryGetValue(layer.Index+1,out value)?value:0;}
     }
     public sealed class Snapshot
     {
@@ -109,7 +130,9 @@ namespace RhinoAI
     }
     public static class Exporter
     {
-        public static Snapshot Capture(RhinoDoc doc,Config config)
+        public static Snapshot Capture(RhinoDoc doc,Config config){return Capture(doc,config,null);}
+        // frame: a ratio an AI render engine asks for. Without one, the Frame ratio setting decides.
+        public static Snapshot Capture(RhinoDoc doc,Config config,int[] frame)
         {
             var view=doc.Views.ActiveView;if(view==null)throw new InvalidOperationException("Activate a model viewport first.");
             if(view is RhinoPageView)throw new InvalidOperationException("Switch to a model-space viewport before exporting.");
@@ -119,7 +142,10 @@ namespace RhinoAI
             int longest=Math.Max(size.Width,size.Height),target=Math.Max(256,Math.Min(4096,config.LongEdge));
             int defaultW=Math.Max(1,(int)Math.Round(size.Width*(double)target/longest)),defaultH=Math.Max(1,(int)Math.Round(size.Height*(double)target/longest));
             var layout=new CanvasLayout{CaptureWidth=defaultW,CaptureHeight=defaultH,OutputWidth=defaultW,OutputHeight=defaultH,Crop=new Rectangle(0,0,defaultW,defaultH)};
-            if(!config.ProductMode&&config.LockSceneAspect)layout=WallpaperLayout(size.Width,size.Height,Math.Max(1,config.SceneAspectWidth),Math.Max(1,config.SceneAspectHeight),target);
+            // Image models draw a few fixed ratios only. Exporting one of them keeps the model from stretching or recomposing the view.
+            int[] ratio=config.ProductMode?null:frame??AiProviders.ModelFrame(config.FrameRatio,config.LockSceneAspect?config.SceneAspectWidth:size.Width,config.LockSceneAspect?config.SceneAspectHeight:size.Height);
+            if(ratio!=null)layout=WallpaperLayout(size.Width,size.Height,ratio[0],ratio[1],target);
+            else if(!config.ProductMode&&config.LockSceneAspect)layout=WallpaperLayout(size.Width,size.Height,Math.Max(1,config.SceneAspectWidth),Math.Max(1,config.SceneAspectHeight),target);
             int wallpaperWidth=0,wallpaperHeight=0;
             if(config.ProductMode&&config.MatchWallpaperAspect)
             {
@@ -165,7 +191,8 @@ namespace RhinoAI
             s.Warnings.Add("Control images treat transparent surfaces as opaque. basecolor is the flat material color without textures, lighting or PBR channels. Curves, points, annotations and unbaked Grasshopper previews are not included.");
             s.Warnings.Add("Material ID follows Rhino layers strictly: one color per layer. Per-face material overrides are not detected.");
             s.Warnings.Add("Normals are in camera space: R=right, G=up, B=toward camera. Edges come from occlusion, object boundaries, depth and normal changes, not Make2D or Canny.");
-            if(!config.ProductMode&&config.LockSceneAspect)s.Warnings.Add("Standard scene locked to the widescreen frame "+config.SceneAspectWidth+" × "+config.SceneAspectHeight+". Window and sidebar size no longer change the output, and all control images share one camera sub-frustum.");
+            if(ratio!=null)s.Warnings.Add("Frame exported at "+ratio[0]+":"+ratio[1]+", a ratio image models draw natively, so the result is not stretched or recomposed. Set the model node to the same ratio, or to auto. All control images share one camera sub-frustum.");
+            else if(!config.ProductMode&&config.LockSceneAspect)s.Warnings.Add("Standard scene locked to the widescreen frame "+config.SceneAspectWidth+" × "+config.SceneAspectHeight+". Window and sidebar size no longer change the output, and all control images share one camera sub-frustum.");
             if(config.ProductMode)
             {
                 s.WallpaperPath=vp.WallpaperFilename;
@@ -262,7 +289,8 @@ namespace RhinoAI
             var files=raster.Save(dir,snapshot.LayerColors);
             if(snapshot.Rendered!=null&&snapshot.Rendered.Length>0){string rendered=Path.Combine(dir,"rendered.png");File.WriteAllBytes(rendered,snapshot.Rendered);files["rendered"]=rendered;}
             var rules=config.Layers.Where(x=>visible.Contains(x.Index+1)).ToList();
-            string prompt=MaterialRules.Prompt(rules,null);
+            var share=raster.Materials.Where(x=>x>0).GroupBy(x=>x).ToDictionary(g=>g.Key,g=>g.Count()/(double)raster.Materials.Length);
+            string prompt=MaterialRules.Prompt(rules,share);
             string wear=null,placementConstraint=null;
             if(config.ProductMode)wear=ProductExport.Save(snapshot,raster,config,dir,files,out placementConstraint);
             File.WriteAllText(Path.Combine(dir,"material_prompt.txt"),prompt,Encoding.UTF8);

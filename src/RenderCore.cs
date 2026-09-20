@@ -112,18 +112,27 @@ namespace RhinoAI
                 maps["material_id"][i]=hit?(layerColors.TryGetValue(Materials[i],out materialColor)?materialColor:Palette(Materials[i])):0;
                 maps["object_id"][i]=hit?Palette(Objects[i]):0;
                 maps["basecolor"][i]=hit?Colors[i]:0;
-                bool edge=false,sil=false;int x=i%w,y=i/w;
-                foreach(int off in new[]{-1,1,-w,w})
+            }
+            // Each boundary marks exactly one pixel, on the surface in front. Marking both sides doubled every
+            // line and merged thin parts such as chair legs into solid blobs.
+            var edge=new bool[n];var sil=new bool[n];
+            for(int i=0;i<n;i++)
+            {
+                bool hit=Objects[i]!=0;int x=i%w,y=i/w;
+                if(hit&&(x==0||x==w-1||y==0||y==h-1)){edge[i]=true;sil[i]=true;}
+                foreach(int off in new[]{1,w})
                 {
-                    int j=i+off;if((off==-1&&x==0)||(off==1&&x==w-1)||(off==-w&&y==0)||(off==w&&y==h-1)){if(hit){edge=true;sil=true;}continue;}
-                    bool other=Objects[j]!=0;
-                    if(hit!=other){edge=true;sil=true;continue;}
+                    if((off==1&&x==w-1)||(off==w&&y==h-1))continue;
+                    int j=i+off;bool other=Objects[j]!=0;
+                    if(hit!=other){int front=hit?i:j;edge[front]=true;sil[front]=true;continue;}
                     if(!hit)continue;
                     double dot=NX[i]*NX[j]+NY[i]*NY[j]+NZ[i]*NZ[j];
-                    if(Objects[i]!=Objects[j] || Layers[i]!=Layers[j] || dot<0.78 || Math.Abs(Depth[i]-Depth[j])>Math.Max(range*0.015,Depth[i]*0.002))edge=true;
+                    if(Objects[i]!=Objects[j] || Layers[i]!=Layers[j] || dot<0.78 || Math.Abs(Depth[i]-Depth[j])>Math.Max(range*0.015,Depth[i]*0.002))edge[Depth[i]<=Depth[j]?i:j]=true;
                 }
-                maps["lineart"][i]=edge?0:0xffffff;maps["edges"][i]=edge?0xffffff:0;maps["silhouette"][i]=sil?0xffffff:0;
             }
+            // One pixel up to about 1500 px, then wider so lines survive the model's own downscaling.
+            int weight=LineWeight(w,h);edge=Thicken(edge,w,h,weight-1);sil=Thicken(sil,w,h,weight-1);
+            for(int i=0;i<n;i++){maps["lineart"][i]=edge[i]?0:0xffffff;maps["edges"][i]=edge[i]?0xffffff:0;maps["silhouette"][i]=sil[i]?0xffffff:0;}
             // One human-readable geometry guide is more reliable for multimodal
             // image models than asking them to infer CAD form from raw maps alone.
             // It preserves the exact camera and silhouette while exposing concavity,
@@ -131,14 +140,7 @@ namespace RhinoAI
             for(int i=0;i<n;i++)
             {
                 if(Objects[i]==0){maps["shape_lock"][i]=0xf7f7f7;continue;}
-                int x=i%w,y=i/w;bool ink=maps["edges"][i]!=0;
-                if(!ink)
-                {
-                    for(int yy=Math.Max(0,y-1);yy<=Math.Min(h-1,y+1)&&!ink;yy++)
-                    for(int xx=Math.Max(0,x-1);xx<=Math.Min(w-1,x+1);xx++)
-                        if(maps["edges"][yy*w+xx]!=0){ink=true;break;}
-                }
-                if(ink){maps["shape_lock"][i]=0x20242a;continue;}
+                if(edge[i]){maps["shape_lock"][i]=0x20242a;continue;}
                 double light=Math.Max(0,Math.Min(1,-0.36*NX[i]+0.48*NY[i]+0.80*NZ[i]));
                 int shade=Math.Max(105,Math.Min(232,(int)Math.Round(112+120*light)));
                 maps["shape_lock"][i]=Rgb(shade,shade,shade);
@@ -148,7 +150,29 @@ namespace RhinoAI
             using(var writer=new BinaryWriter(File.Create(Path.Combine(directory,"depth_linear.f32"))))foreach(float d in Depth)writer.Write(float.IsInfinity(d)?float.NaN:d);
             return files;
         }
+        public static int LineWeight(int width,int height){return Math.Max(1,(int)Math.Round(Math.Max(width,height)/1536.0));}
+        // Grows marks toward the right and down only, so a line gains exactly the requested extra pixels.
+        static bool[] Thicken(bool[] source,int w,int h,int extra)
+        {
+            if(extra<1)return source;var result=(bool[])source.Clone();
+            for(int y=0;y<h;y++)for(int x=0;x<w;x++)
+            {
+                if(!source[y*w+x])continue;
+                for(int dy=0;dy<=extra&&y+dy<h;dy++)for(int dx=0;dx<=extra&&x+dx<w;dx++)result[(y+dy)*w+x+dx]=true;
+            }
+            return result;
+        }
         static int Encode(float n){return Math.Max(0,Math.Min(255,(int)Math.Round((n+1)*127.5)));}
+        // Image models read "#651FFF" poorly but "violet-purple" well, so the mapping names every ID color.
+        public static string ColorName(int rgb)
+        {
+            double r=((rgb>>16)&255)/255.0,g=((rgb>>8)&255)/255.0,b=(rgb&255)/255.0,max=Math.Max(r,Math.Max(g,b)),min=Math.Min(r,Math.Min(g,b)),delta=max-min;
+            if(max<0.15)return "black";
+            double s=max<=0?0:delta/max;if(s<0.12)return max>0.85?"white":"grey";
+            double hue=max==r?60*(((g-b)/delta)%6):max==g?60*((b-r)/delta+2):60*((r-g)/delta+4);if(hue<0)hue+=360;
+            string name=hue<15||hue>=345?"red":hue<40?(max<0.65?"brown":"orange"):hue<70?"yellow":hue<100?"lime green":hue<160?"green":hue<178?"teal":hue<200?"cyan":hue<250?"blue":hue<285?"violet-purple":hue<320?"magenta":"pink";
+            return (s<0.45&&max>0.8?"light ":"")+name;
+        }
         public static int Palette(int id)
         {
             // Saturated, widely separated colors remain readable on the black ID-map
