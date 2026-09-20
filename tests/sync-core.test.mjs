@@ -103,6 +103,10 @@ assert(imageGuide({...data,prompts:{color_materials:'#E63946 = glazed ceramic'}}
 assert(guide.includes('MANDATORY MATERIAL ID COLOR BAN')&&guide.includes('never purple wood')&&guide.includes('FINAL MATERIAL COLOR CHECK BEFORE OUTPUT')&&guide.includes('temporary CAD display colors'),'ID colors are banned as appearance whenever material_id is sent');
 assert(guide.indexOf('MANDATORY MATERIAL ID COLOR BAN')<guide.indexOf('Image 1 ('),'the ban comes before the image roles');
 assert(!imageGuide(data,['depth']).includes('MATERIAL ID COLOR BAN'));
+assert(guide.includes('MANDATORY CAMERA AND COMPOSITION LOCK')&&guide.includes('Use the rendered image as the base canvas')&&guide.includes('no base, plinth, pedestal')&&guide.includes('FINAL CAMERA CHECK BEFORE OUTPUT'),'scene mode locks the camera and frames the task as an edit');
+assert(guide.indexOf('CAMERA AND COMPOSITION LOCK')<guide.indexOf('MATERIAL ID COLOR BAN'),'the camera lock leads the guide');
+assert(imageGuide(data,['shape_lock']).includes('Use the shape_lock image as the base canvas'));
+assert(!imageGuide(data,['reference','placement']).includes('CAMERA AND COMPOSITION LOCK'),'background blend keeps its own placement lock');
 const manual='My lighting prompt\nColor code: blue = silver';
 const migrated=mergePrompt(manual+'\n[RHINO MATERIAL & IMAGE GUIDE]\nOld automatic material and style prompt\n[/RHINO MATERIAL & IMAGE GUIDE]', '#E63946 = ceramic');
 assert(migrated.startsWith('#E63946 = ceramic'));assert(!migrated.includes('Old automatic'));assert(migrated.endsWith(manual));
