@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
@@ -24,6 +25,7 @@ namespace RhinoAI
         public string Output=Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),"RhinoAI Exports");
         public string Workflow="";
         public bool ProductMode=false,SelectedOnly=false;
+        public bool MatchWallpaperAspect=true;
         public bool DetailPriority=true;
         public bool AutoEditRegion=true;
         public bool AutoSync=false;
@@ -105,6 +107,11 @@ namespace RhinoAI
         public Dictionary<string,string> Files;
         public List<string> Warnings;
     }
+    internal sealed class CanvasLayout
+    {
+        public int CaptureWidth,CaptureHeight,OutputWidth,OutputHeight;
+        public Rectangle Crop;
+    }
     public static class Exporter
     {
         public static Snapshot Capture(RhinoDoc doc,Config config)
@@ -115,17 +122,41 @@ namespace RhinoAI
             if(config.ProductMode && (!vp.WallpaperVisible || string.IsNullOrEmpty(vp.WallpaperFilename)))throw new InvalidOperationException("产品佩戴模式需要在当前视口设置并显示 Wallpaper。请先用 Wallpaper 命令放入参考图并对齐产品。");
             if(!vp.GetFrustum(out l,out r,out b,out t,out n,out f))throw new InvalidOperationException("无法读取镜头视锥。");
             int longest=Math.Max(size.Width,size.Height),target=Math.Max(256,Math.Min(4096,config.LongEdge));
-            int w=Math.Max(1,(int)Math.Round(size.Width*(double)target/longest)),h=Math.Max(1,(int)Math.Round(size.Height*(double)target/longest));
+            int defaultW=Math.Max(1,(int)Math.Round(size.Width*(double)target/longest)),defaultH=Math.Max(1,(int)Math.Round(size.Height*(double)target/longest));
+            var layout=new CanvasLayout{CaptureWidth=defaultW,CaptureHeight=defaultH,OutputWidth=defaultW,OutputHeight=defaultH,Crop=new Rectangle(0,0,defaultW,defaultH)};
+            int wallpaperWidth=0,wallpaperHeight=0;
+            if(config.ProductMode&&config.MatchWallpaperAspect)
+            {
+                try
+                {
+                    using(var image=Image.FromFile(vp.WallpaperFilename))
+                    {
+                        wallpaperWidth=image.Width;wallpaperHeight=image.Height;
+                        try
+                        {
+                            if(image.PropertyIdList.Contains(0x0112))
+                            {
+                                int orientation=BitConverter.ToUInt16(image.GetPropertyItem(0x0112).Value,0);
+                                if(orientation>=5&&orientation<=8){int swap=wallpaperWidth;wallpaperWidth=wallpaperHeight;wallpaperHeight=swap;}
+                            }
+                        }catch(ArgumentException){}
+                    }
+                    layout=WallpaperLayout(size.Width,size.Height,wallpaperWidth,wallpaperHeight,target);
+                }
+                catch(Exception e){RhinoApp.WriteLine("Wallpaper 原图比例读取失败，将使用当前视口比例："+e.Message);}
+            }
+            int w=layout.OutputWidth,h=layout.OutputHeight;
             config.Scan(doc);
-            var s=new Snapshot{Camera=new Camera{Width=w,Height=h,Left=l,Right=r,Bottom=b,Top=t,Near=n,Far=f,Perspective=vp.IsPerspectiveProjection}};
-            s.View=new {name=vp.Name,camera=vp.CameraLocation,target=vp.CameraTarget,up=vp.CameraUp,units=doc.ModelUnitSystem.ToString(),viewportWidth=size.Width,viewportHeight=size.Height};
+            var captureCamera=new Camera{Width=layout.CaptureWidth,Height=layout.CaptureHeight,Left=l,Right=r,Bottom=b,Top=t,Near=n,Far=f,Perspective=vp.IsPerspectiveProjection};
+            var s=new Snapshot{Camera=ProductExport.CropCamera(captureCamera,layout.Crop,w,h)};
+            s.View=new {name=vp.Name,camera=vp.CameraLocation,target=vp.CameraTarget,up=vp.CameraUp,units=doc.ModelUnitSystem.ToString(),viewportWidth=size.Width,viewportHeight=size.Height,captureWidth=layout.CaptureWidth,captureHeight=layout.CaptureHeight,outputWidth=w,outputHeight=h,wallpaperWidth=wallpaperWidth,wallpaperHeight=wallpaperHeight,wallpaperCropPixels=new[]{layout.Crop.Left,layout.Crop.Top,layout.Crop.Right,layout.Crop.Bottom},wallpaperAspectMatched=config.ProductMode&&config.MatchWallpaperAspect&&wallpaperWidth>0};
             foreach(var rule in config.Layers){s.LayerColors[rule.Index+1]=Convert.ToInt32(rule.Color.TrimStart('#'),16);s.LayerTargetMaterials[rule.Index+1]=rule.Material;}
             var transform=vp.GetTransform(CoordinateSystem.World,CoordinateSystem.Camera);
             var objects=doc.Objects.GetObjectList(new ObjectEnumeratorSettings{NormalObjects=true,LockedObjects=true,HiddenObjects=false,ReferenceObjects=true});
             var materials=new Dictionary<string,int>();int id=0;
             var selected=new HashSet<Guid>(doc.Objects.GetSelectedObjects(false,false).Select(o=>o.Id));
             if(config.SelectedOnly && selected.Count==0)throw new InvalidOperationException("请先选择需要导出的产品对象，或关闭“仅选中对象”。");
-            s.Rendered=CaptureRendered(view,vp.Id,w,h,config.SelectedOnly?selected:null);
+            s.Rendered=CropPng(CaptureRendered(view,vp.Id,layout.CaptureWidth,layout.CaptureHeight,config.SelectedOnly?selected:null),layout.Crop,w,h);
             foreach(var obj in objects)
             {
                 if(!obj.Visible || !VisibleLayer(doc,obj.Attributes.LayerIndex))continue;
@@ -141,16 +172,47 @@ namespace RhinoAI
             if(config.ProductMode)
             {
                 s.WallpaperPath=vp.WallpaperFilename;
-                var capture=new ViewCapture{Width=w,Height=h,DrawAxes=false,DrawGrid=false,DrawGridAxes=false,TransparentBackground=false,ScaleScreenItems=false};
+                var capture=new ViewCapture{Width=layout.CaptureWidth,Height=layout.CaptureHeight,DrawAxes=false,DrawGrid=false,DrawGridAxes=false,TransparentBackground=false,ScaleScreenItems=false};
                 using(var suppress=new BackgroundOnly(vp.Id))
                 {
                     suppress.Enabled=true;
-                    try{using(var bitmap=capture.CaptureToBitmap(view))using(var memory=new MemoryStream()){if(bitmap==null)throw new InvalidOperationException("Wallpaper 捕获失败。");bitmap.Save(memory,ImageFormat.Png);s.Wallpaper=memory.ToArray();}}
+                    try{using(var bitmap=capture.CaptureToBitmap(view))using(var memory=new MemoryStream()){if(bitmap==null)throw new InvalidOperationException("Wallpaper 捕获失败。");bitmap.Save(memory,ImageFormat.Png);s.Wallpaper=CropPng(memory.ToArray(),layout.Crop,w,h);}}
                     finally{suppress.Enabled=false;}
                 }
+                if(config.MatchWallpaperAspect&&wallpaperWidth>0)s.Warnings.Add("Wallpaper 已按原图比例输出为 "+w+" × "+h+"；视口留白已裁除，几何控制图使用同一子视锥，镜头与 Perspective 保持一致。");
                 s.Warnings.Add("人物遮挡无法从单张 Wallpaper 精确求得。inpaint_mask 仅是产品蒙版扩张；可提供同尺寸遮挡蒙版（白色保护人物区域）。请检查手指/链条前后关系。");
             }
             return s;
+        }
+        internal static CanvasLayout WallpaperLayout(int viewportWidth,int viewportHeight,int imageWidth,int imageHeight,int longEdge)
+        {
+            if(viewportWidth<1||viewportHeight<1||imageWidth<1||imageHeight<1)throw new ArgumentOutOfRangeException("Wallpaper 和视口尺寸必须为正数。");
+            int target=Math.Max(256,Math.Min(4096,longEdge));double imageAspect=imageWidth/(double)imageHeight,viewportAspect=viewportWidth/(double)viewportHeight;
+            int outputWidth=imageAspect>=1?target:Math.Max(1,(int)Math.Round(target*imageAspect));
+            int outputHeight=imageAspect>=1?Math.Max(1,(int)Math.Round(target/imageAspect)):target;
+            int captureWidth,captureHeight,left=0,top=0;
+            if(imageAspect<=viewportAspect)
+            {
+                captureHeight=outputHeight;captureWidth=Math.Max(outputWidth,(int)Math.Round(captureHeight*viewportAspect));left=(captureWidth-outputWidth)/2;
+            }
+            else
+            {
+                captureWidth=outputWidth;captureHeight=Math.Max(outputHeight,(int)Math.Round(captureWidth/viewportAspect));top=(captureHeight-outputHeight)/2;
+            }
+            return new CanvasLayout{CaptureWidth=captureWidth,CaptureHeight=captureHeight,OutputWidth=outputWidth,OutputHeight=outputHeight,Crop=new Rectangle(left,top,outputWidth,outputHeight)};
+        }
+        static byte[] CropPng(byte[] png,Rectangle crop,int width,int height)
+        {
+            if(crop.Left==0&&crop.Top==0&&crop.Width==width&&crop.Height==height)return png;
+            using(var input=new MemoryStream(png))using(var source=new Bitmap(input))using(var output=new Bitmap(width,height,PixelFormat.Format32bppArgb))
+            {
+                using(var g=Graphics.FromImage(output))
+                {
+                    g.CompositingMode=CompositingMode.SourceCopy;g.CompositingQuality=CompositingQuality.HighQuality;g.InterpolationMode=InterpolationMode.HighQualityBicubic;g.PixelOffsetMode=PixelOffsetMode.HighQuality;
+                    g.DrawImage(source,new Rectangle(0,0,width,height),crop,GraphicsUnit.Pixel);
+                }
+                using(var memory=new MemoryStream()){output.Save(memory,ImageFormat.Png);return memory.ToArray();}
+            }
         }
         static bool VisibleLayer(RhinoDoc doc,int idx)
         {

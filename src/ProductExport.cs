@@ -108,8 +108,12 @@ namespace RhinoAI
         }
         internal static Camera CropCamera(Camera source,Rectangle crop)
         {
+            return CropCamera(source,crop,source.Width,source.Height);
+        }
+        internal static Camera CropCamera(Camera source,Rectangle crop,int outputWidth,int outputHeight)
+        {
             double sx0=crop.Left/(double)source.Width,sx1=crop.Right/(double)source.Width,sy0=crop.Top/(double)source.Height,sy1=crop.Bottom/(double)source.Height;
-            return new Camera{Width=source.Width,Height=source.Height,Left=source.Left+(source.Right-source.Left)*sx0,Right=source.Left+(source.Right-source.Left)*sx1,Top=source.Top-(source.Top-source.Bottom)*sy0,Bottom=source.Top-(source.Top-source.Bottom)*sy1,Near=source.Near,Far=source.Far,Perspective=source.Perspective};
+            return new Camera{Width=outputWidth,Height=outputHeight,Left=source.Left+(source.Right-source.Left)*sx0,Right=source.Left+(source.Right-source.Left)*sx1,Top=source.Top-(source.Top-source.Bottom)*sy0,Bottom=source.Top-(source.Top-source.Bottom)*sy1,Near=source.Near,Far=source.Far,Perspective=source.Perspective};
         }
         static void SaveCrop(string source,string target,Rectangle crop,int width,int height)
         {

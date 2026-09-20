@@ -13,6 +13,7 @@
 - Material ID 严格按照 Rhino 图层区分；需要分开的材质部件应放在不同图层。
 - 图层颜色可映射为目标材质，并同步简短的 `#HEX = 目标材质`。
 - 支持 Rhino Wallpaper 人物、手部和颈部参考图。
+- 自动匹配 Portrait 或 Landscape Wallpaper 的原图比例，裁掉 Rhino 视口留白，同时保持相机位置、镜头和 Perspective 光线一致。
 - 导出 Placement、Scale Lock、Product Mask、Inpaint Mask 和可选遮挡蒙版。
 - 产品在全画幅中很小时，额外生成同一相机透视下的高清局部几何控制图。
 - 针对 Nano Banana 多图输入自动限制为不超过 14 张。
@@ -79,6 +80,8 @@
 
 全画幅 `reference` 和 `placement` 决定最终构图、位置与尺度。`scale_lock.png` 在完整画幅中标记产品的精确轮廓、外接框和中心。放大的 `*_detail` 图片只提供造型与材质细节，不能改变最终产品的大小和位置。
 
+保持“按 Wallpaper 原图比例输出”开启时，Portrait 参考图会直接生成竖幅结果。插件会先以足够的中间分辨率捕获完整 Rhino 视口，再裁出对应的相机子视锥，并把同一竖幅画布用于 reference、placement、rendered、全部几何控制图及蒙版；不会拉伸或旋转照片。
+
 若需要严格保持蒙版外像素，应在工作流中使用 `inpaint_mask.png`，并把生成区域重新合成到 `reference.png`。单靠文字提示不能保证蒙版外每一个像素完全不变。
 
 ## 主要导出文件
@@ -102,7 +105,7 @@
 | `inpaint_mask.png` | 平滑的允许编辑邻域 |
 | `tryon.json` | 位置边界、相机、图片职责和约束信息 |
 
-同一次导出的基础控制图使用完全相同的相机和透视。局部细节图使用从原视角裁切出的相机视锥，因此 Perspective 保持一致。
+同一次导出的基础控制图使用完全相同的相机和透视。Portrait 输出和局部细节图都使用从原视角裁切出的相机子视锥，不改变相机位置或镜头，因此 Perspective 保持一致。
 
 ## 构建与测试
 

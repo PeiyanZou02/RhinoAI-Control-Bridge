@@ -11,7 +11,7 @@ using Rhino.Commands;
 using Rhino.PlugIns;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino AI Control Bridge")]
-[assembly: System.Reflection.AssemblyVersion("0.16.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.17.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -44,7 +44,7 @@ namespace RhinoAI
         readonly TextBox server=new TextBox(),output=new TextBox(),workflow=new TextBox(),wear=new TextBox(),occlusion=new TextBox();
         readonly ComboBox product=new ComboBox();
         readonly NumericUpDown edge=new NumericUpDown(),padding=new NumericUpDown();
-        readonly CheckBox selected=new CheckBox(),tryon=new CheckBox(),autoSync=new CheckBox(),detailPriority=new CheckBox(),adaptiveMask=new CheckBox();
+        readonly CheckBox selected=new CheckBox(),tryon=new CheckBox(),autoSync=new CheckBox(),detailPriority=new CheckBox(),adaptiveMask=new CheckBox(),wallpaperAspect=new CheckBox();
         readonly AutoSyncWatcher watcher;
         readonly DataGridView layers=new DataGridView();
         readonly TextBox log=new TextBox();
@@ -65,18 +65,19 @@ namespace RhinoAI
             edge.Minimum=256;edge.Maximum=4096;edge.Increment=256;edge.Value=config.LongEdge;
             selected.Text="仅导出当前选中对象（产品模式建议开启）";selected.AutoSize=true;selected.Checked=config.SelectedOnly;
             autoSync.Text="场景变化后自动上传图片（不会修改 ComfyUI prompt；默认关闭）";autoSync.AutoSize=true;autoSync.Checked=config.AutoSync;
-            Row(form,"ComfyUI 地址",server);Row(form,"导出目录",Browse(output,false,true));Row(form,"API 工作流（可选）",Browse(workflow,true,false));Row(form,"输出最长边（保持当前视口比例）",edge);Row(form,"对象范围",selected);Row(form,"自动同步",autoSync);
+            Row(form,"ComfyUI 地址",server);Row(form,"导出目录",Browse(output,false,true));Row(form,"API 工作流（可选）",Browse(workflow,true,false));Row(form,"输出最长边",edge);Row(form,"对象范围",selected);Row(form,"自动同步",autoSync);
             Row(form,"说明",new Label{AutoSize=true,MaximumSize=new Size(680,0),Text="每次同步会一起更新 Batch 图片和对应的 Image 编号/用途说明，并保留你自己写的 prompt。不会提交生成任务。\nshape_lock 是主要造型参考；生成请在 ComfyUI 手动点击 Run。"});
             var materialLayout=new TableLayoutPanel{Dock=DockStyle.Fill,RowCount=2,ColumnCount=1};materialLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,60));materialLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));material.Controls.Add(materialLayout);
             var materialActions=new FlowLayoutPanel{Dock=DockStyle.Fill};materialActions.Controls.Add(Button("重新读取图层",delegate{Read();config.Scan(doc);FillLayers();}));materialActions.Controls.Add(Button("按表格建立图层材质",delegate{Read();ApplyMaterials();}));materialActions.Controls.Add(new Label{Text="只需填写目标材质；图层与编码色由插件自动管理，并自动写入 ComfyUI prompt。",AutoSize=true,Padding=new Padding(6,12,0,0)});materialLayout.Controls.Add(materialActions,0,0);
             layers.Dock=DockStyle.Fill;layers.AllowUserToAddRows=false;layers.AllowUserToDeleteRows=false;layers.RowHeadersVisible=false;layers.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;layers.DefaultCellStyle.WrapMode=DataGridViewTriState.True;
             layers.Columns.Add(new DataGridViewTextBoxColumn{Name="Layer",HeaderText="Rhino 图层（自动）",ReadOnly=true,Width=240});layers.Columns.Add(new DataGridViewTextBoxColumn{Name="Color",HeaderText="编码色（自动）",ReadOnly=true,Width=150});layers.Columns.Add(new DataGridViewTextBoxColumn{Name="Material",HeaderText="目标材质（只编辑这里）",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});materialLayout.Controls.Add(layers,0,1);FillLayers();
             var productForm=Layout();productTab.Controls.Add(productForm);tryon.Text="启用 Wallpaper 产品佩戴模式";tryon.AutoSize=true;tryon.Checked=config.ProductMode;
+            wallpaperAspect.Text="按 Wallpaper 原图比例输出（Portrait 自动裁切视口留白）";wallpaperAspect.AutoSize=true;wallpaperAspect.Checked=config.MatchWallpaperAspect;
             detailPriority.Text="细节优先（使用像素放大控制图；同步到 Batch 最多 14 张）";detailPriority.AutoSize=true;detailPriority.Checked=config.DetailPriority;
             adaptiveMask.Text="自动扩大替换区域（覆盖模特原有饰品；填写像素值作为最小值）";adaptiveMask.AutoSize=true;adaptiveMask.Checked=config.AutoEditRegion;
             product.Items.AddRange(new object[]{"ring / 戒指","necklace / 项链","earrings / 耳环","bracelet / 手链","other product / 其他产品"});product.Text=config.Product;
             wear.Multiline=true;wear.Height=180;wear.Text=config.WearInstructions;padding.Minimum=0;padding.Maximum=256;padding.Value=config.MaskPadding;occlusion.Text=config.OcclusionMask;
-            Row(productForm,"佩戴参考",tryon);Row(productForm,"输入策略",detailPriority);Row(productForm,"产品类型",product);Row(productForm,"佩戴关系与保留要求",wear);Row(productForm,"编辑范围",adaptiveMask);Row(productForm,"最小扩张（像素）",padding);Row(productForm,"遮挡保护蒙版（可选）",Browse(occlusion,false,false));
+            Row(productForm,"佩戴参考",tryon);Row(productForm,"画幅比例",wallpaperAspect);Row(productForm,"输入策略",detailPriority);Row(productForm,"产品类型",product);Row(productForm,"佩戴关系与保留要求",wear);Row(productForm,"编辑范围",adaptiveMask);Row(productForm,"最小扩张（像素）",padding);Row(productForm,"遮挡保护蒙版（可选）",Browse(occlusion,false,false));
             Row(productForm,"使用步骤",new Label{AutoSize=true,MaximumSize=new Size(720,0),Text="1. 在当前 Rhino 视口用 Wallpaper 放入人物参考照片。\n2. 移动 / 旋转产品并调整视角，使戒指或项链与照片位置对齐。\n3. 选择产品对象，在导出页开启“仅导出当前选中对象”。\n4. 导出：获得原生对齐参考图、位置合成图、产品蒙版、编辑蒙版、几何控制图和佩戴提示词。\n\n人物遮挡不会自动精确识别。可加入与导出图同尺寸的黑白遮挡蒙版：白色保护人物，黑色不保护。ComfyUI 读取编辑蒙版时用 ImageToMask 的 red 通道。"});
             actions.Dock=DockStyle.Bottom;actions.Height=52;actions.Padding=new Padding(8);actions.Controls.Add(Button("导出控制图",async delegate{await Export(false,false);}));actions.Controls.Add(Button("更新到 ComfyUI",async delegate{await Export(true,false);}));actions.Controls.Add(Button("测试连接",async delegate{try{Read();using(var client=new ComfyClient(config.Server))await client.Check();Log("ComfyUI 连接正常。");}catch(Exception e){Log(e.Message);}}));actions.Controls.Add(Button("查看导出文件夹",delegate{if(last!=null)Open(last.Directory);}));actions.Controls.Add(Button("打开 ComfyUI",delegate{Read();Open(config.Server);}));
             log.Multiline=true;log.ReadOnly=true;log.ScrollBars=ScrollBars.Vertical;log.Dock=DockStyle.Bottom;log.Height=110;progress.Dock=DockStyle.Bottom;progress.Height=8;
@@ -100,7 +101,7 @@ namespace RhinoAI
         {
             layers.EndEdit();foreach(DataGridViewRow row in layers.Rows){var l=(LayerRule)row.Tag;l.Material=Convert.ToString(row.Cells[2].Value).Trim();if(string.IsNullOrWhiteSpace(l.Material))throw new ArgumentException("请填写目标材质："+l.Name);}
             if(config.Layers.Select(l=>l.Color.ToUpperInvariant()).Distinct().Count()!=config.Layers.Count)throw new ArgumentException("每个图层的编码色必须唯一。");
-            config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.LongEdge=(int)edge.Value;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.Product=product.Text;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;
+            config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.LongEdge=(int)edge.Value;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.MatchWallpaperAspect=wallpaperAspect.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.Product=product.Text;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;
         }
         void ApplyColors(){uint undo=doc.BeginUndoRecord("Rhino AI layer color codes");try{foreach(var rule in config.Layers){var layer=doc.Layers.FindId(new Guid(rule.Id));if(layer!=null){layer.Color=ColorTranslator.FromHtml(rule.Color);}}}finally{doc.EndUndoRecord(undo);}doc.Views.Redraw();Log("编码色已应用到图层显示颜色，可用 Undo 撤销。材质定义请在表格中编辑。");}
         void ApplyMaterials()
@@ -122,7 +123,7 @@ namespace RhinoAI
         }
         string SyncSettingsSignature()
         {
-            return string.Join("|",new[]{server.Text,output.Text,workflow.Text,edge.Value.ToString(),selected.Checked.ToString(),tryon.Checked.ToString(),detailPriority.Checked.ToString(),adaptiveMask.Checked.ToString(),product.Text,wear.Text,padding.Value.ToString(),occlusion.Text,AutoSyncWatcher.FileStamp(occlusion.Text),string.Join(";",layers.Rows.Cast<DataGridViewRow>().Select(r=>string.Join("|",r.Cells.Cast<DataGridViewCell>().Select(c=>Convert.ToString(c.Value)))))});
+            return string.Join("|",new[]{server.Text,output.Text,workflow.Text,edge.Value.ToString(),selected.Checked.ToString(),tryon.Checked.ToString(),wallpaperAspect.Checked.ToString(),detailPriority.Checked.ToString(),adaptiveMask.Checked.ToString(),product.Text,wear.Text,padding.Value.ToString(),occlusion.Text,AutoSyncWatcher.FileStamp(occlusion.Text),string.Join(";",layers.Rows.Cast<DataGridViewRow>().Select(r=>string.Join("|",r.Cells.Cast<DataGridViewCell>().Select(c=>Convert.ToString(c.Value)))))});
         }
         async Task Export(bool send,bool automatic)
         {

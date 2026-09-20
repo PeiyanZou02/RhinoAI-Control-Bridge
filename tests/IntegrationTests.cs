@@ -29,6 +29,8 @@ namespace RhinoAI
             double px=0.2,py=0.1,pz=5,projectionScale=fullCamera.Near/pz,fullX=(px*projectionScale-fullCamera.Left)/(fullCamera.Right-fullCamera.Left)*fullCamera.Width,fullY=(fullCamera.Top-py*projectionScale)/(fullCamera.Top-fullCamera.Bottom)*fullCamera.Height;
             double detailX=(px*projectionScale-cropCamera.Left)/(cropCamera.Right-cropCamera.Left)*cropCamera.Width,detailY=(cropCamera.Top-py*projectionScale)/(cropCamera.Top-cropCamera.Bottom)*cropCamera.Height;
             Assert(cropCamera.Perspective&&Math.Abs(detailX-(fullX-cropRect.Left)*fullCamera.Width/cropRect.Width)<1e-9&&Math.Abs(detailY-(fullY-cropRect.Top)*fullCamera.Height/cropRect.Height)<1e-9,"detail crop preserves identical perspective rays");
+            var portrait=Exporter.WallpaperLayout(1600,900,800,1200,1024);Assert(portrait.OutputWidth==683&&portrait.OutputHeight==1024&&portrait.Crop.Width==portrait.OutputWidth&&portrait.CaptureHeight==1024&&portrait.Crop.Left>0,"portrait wallpaper becomes a portrait canvas without viewport side bars");
+            var portraitCamera=ProductExport.CropCamera(new Camera{Width=portrait.CaptureWidth,Height=portrait.CaptureHeight,Left=-1.6,Right=1.6,Bottom=-0.9,Top=0.9,Near=1,Far=100,Perspective=true},portrait.Crop,portrait.OutputWidth,portrait.OutputHeight);Assert(Math.Abs((portraitCamera.Right-portraitCamera.Left)/(portraitCamera.Top-portraitCamera.Bottom)-portrait.OutputWidth/(double)portrait.OutputHeight)<0.002,"portrait crop preserves the source perspective sub-frustum");
             var files=r.Save(Path.Combine(root,"synthetic"),new Dictionary<int,int>{{1,0xff0000}});Assert(files.Count==12&&files.ContainsKey("shape_lock"),"twelve aligned raster channels including shape lock");
             using(var map=new Bitmap(files["color_code"]))Assert((map.GetPixel(32,32).ToArgb()&0xffffff)==0xff0000,"color code exact RGB");
             using(var map=new Bitmap(files["mask"]))Assert(map.GetPixel(0,0).R==0&&map.GetPixel(32,32).R==255,"binary foreground mask");
@@ -45,7 +47,7 @@ namespace RhinoAI
             // Native wallpaper capture is verified without saving or changing geometry. Restore in finally.
             string old=vp.WallpaperFilename;bool gray=vp.WallpaperGrayscale,visible=vp.WallpaperVisible,modified=doc.Modified;
             string pattern=Path.Combine(root,"wallpaper-test.png");
-            using(var bmp=new Bitmap(600,400))using(var g=Graphics.FromImage(bmp)){g.Clear(Color.FromArgb(24,98,166));g.FillRectangle(Brushes.Orange,0,0,300,200);g.FillRectangle(Brushes.Lime,300,200,300,200);bmp.Save(pattern,ImageFormat.Png);}
+            using(var bmp=new Bitmap(400,600))using(var g=Graphics.FromImage(bmp)){g.Clear(Color.FromArgb(24,98,166));g.FillRectangle(Brushes.Orange,0,0,200,300);g.FillRectangle(Brushes.Lime,200,300,200,300);bmp.Save(pattern,ImageFormat.Png);}
             try
             {
                 vp.SetWallpaper(pattern,false,true);config.ProductMode=true;config.LongEdge=512;
@@ -54,6 +56,7 @@ namespace RhinoAI
                 using(var bg=new Bitmap(productResult.Files["reference"]))
                 {
                     Assert(bg.Width==productSnapshot.Camera.Width&&bg.Height==productSnapshot.Camera.Height,"reference alignment dimensions");
+                    Assert(bg.Height>bg.Width&&Math.Abs(bg.Width/(double)bg.Height-2.0/3.0)<0.01,"portrait wallpaper controls portrait output aspect");
                     int clean=0;for(int y=0;y<bg.Height;y++)for(int x=0;x<bg.Width;x++){var p=bg.GetPixel(x,y);if(p.ToArgb()==Color.Orange.ToArgb()||p.ToArgb()==Color.Lime.ToArgb()||p.ToArgb()==Color.FromArgb(24,98,166).ToArgb()||p.ToArgb()==Color.White.ToArgb())clean++;}
                     Assert(clean>bg.Width*bg.Height*0.98,"native background capture excludes geometry");
                     bg.Save(Path.Combine(root,"wallpaper-captured.png"));

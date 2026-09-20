@@ -13,6 +13,7 @@ The bridge updates images and prompt metadata only. It never presses Run, queues
 - Assigns Material ID strictly by Rhino layer so different material regions remain separable.
 - Maps layer colors to editable target-material names and syncs concise `#HEX = material` instructions.
 - Captures a Rhino Wallpaper as the full-frame base image for jewelry and product placement.
+- Matches portrait or landscape Wallpaper source proportions and removes viewport letterboxing while preserving the same camera position, lens, and perspective rays.
 - Produces full-frame placement, product, inpaint, occlusion, and scale-lock masks.
 - Creates high-resolution local geometry crops while keeping the full-frame placement as the authority for final scale and position.
 - Syncs no more than 14 selected inputs for Nano Banana-compatible multi-image workflows.
@@ -79,6 +80,8 @@ Changing a product, camera, selection, or material mapping does not start genera
 
 The synchronized batch uses the full-frame reference and placement images as the authority for composition. `scale_lock.png` marks the exact product silhouette, bounding box, and center in that frame. Enlarged `*_detail` images provide geometry and material detail only; they must not change the final product's scale or position.
 
+Keep **Match Wallpaper source aspect** enabled to make a portrait reference produce a portrait output. The plug-in captures the complete Rhino view at a sufficient intermediate resolution, crops the matching camera sub-frustum, and applies that same portrait canvas to the reference, placement, rendered view, geometry controls, and masks. It does not stretch or rotate the photograph.
+
 For strict compositing, use `inpaint_mask.png` with a workflow that composites generated pixels back over `reference.png`. A text prompt alone cannot guarantee that every pixel outside the edit region remains unchanged.
 
 ## Main exported files
@@ -102,7 +105,7 @@ For strict compositing, use `inpaint_mask.png` with a workflow that composites g
 | `inpaint_mask.png` | Smooth allowed edit neighborhood |
 | `tryon.json` | Placement bounds, camera data, roles, and constraints |
 
-All raster controls from a single export share the same base camera and perspective. Detail controls use a cropped camera frustum derived from the same view.
+All raster controls from a single export share the same base camera and perspective. Portrait output and detail controls use cropped camera sub-frustums derived from the same view, without changing the camera location or lens.
 
 ## Build and test
 
