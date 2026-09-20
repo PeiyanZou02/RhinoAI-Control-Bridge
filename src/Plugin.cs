@@ -13,12 +13,18 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.24.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.25.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
 {
-    public sealed class BridgePlugin : PlugIn { public BridgePlugin(){} }
+    public sealed class BridgePlugin : PlugIn
+    {
+        public BridgePlugin(){}
+        // Load with Rhino so the commands are always registered. Load-on-demand relies on a cached
+        // command list that went stale when the commands were renamed, leaving them "unknown".
+        public override PlugInLoadTime LoadTime {get{return PlugInLoadTime.AtStartup;}}
+    }
     public sealed class OpenBridge : Command
     {
         static BridgeWindow window;
