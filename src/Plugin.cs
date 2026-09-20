@@ -12,8 +12,8 @@ using Rhino.Commands;
 using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
-[assembly: System.Reflection.AssemblyTitle("Rhino AI Control Bridge")]
-[assembly: System.Reflection.AssemblyVersion("0.22.0.0")]
+[assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
+[assembly: System.Reflection.AssemblyVersion("0.23.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -22,7 +22,7 @@ namespace RhinoAI
     public sealed class OpenBridge : Command
     {
         static BridgeWindow window;
-        public override string EnglishName {get{return "RhinoAI";}}
+        public override string EnglishName {get{return "Rhino2Comfy";}}
         protected override Result RunCommand(RhinoDoc doc,RunMode mode)
         {
             if(window!=null&&!window.IsDisposed&&window.DocumentSerial!=doc.RuntimeSerialNumber){window.Close();window=null;}
@@ -32,7 +32,7 @@ namespace RhinoAI
     }
     public sealed class ExportCommand : Command
     {
-        public override string EnglishName {get{return "RhinoAIExport";}}
+        public override string EnglishName {get{return "Rhino2ComfyExport";}}
         protected override Result RunCommand(RhinoDoc doc,RunMode mode)
         {
             try{var c=Config.Load();var result=Exporter.Render(Exporter.Capture(doc,c),c,null);c.Save();RhinoApp.WriteLine("Export: "+result.Directory);return Result.Success;}
@@ -65,7 +65,7 @@ namespace RhinoAI
         {
             doc=document;config=Config.Load();if(doc!=null)config.Scan(doc);
             Theme.Scale=DeviceDpi/96f;mono=Theme.Mono();
-            Text="Rhino AI";ClientSize=new Size(Theme.S(920),Theme.S(640));MinimumSize=new Size(Theme.S(760),Theme.S(540));StartPosition=FormStartPosition.CenterScreen;
+            Text="Rhino to Comfy";ClientSize=new Size(Theme.S(920),Theme.S(640));MinimumSize=new Size(Theme.S(760),Theme.S(540));StartPosition=FormStartPosition.CenterScreen;
             Font=Theme.Body();BackColor=Theme.Bg;ForeColor=Theme.Text;
             progress=new ThinProgress{Dock=DockStyle.Fill,Margin=Padding.Empty};connection=new StatusDot{Dock=DockStyle.Fill,Font=Theme.Small(),Margin=Padding.Empty};connection.Set(Theme.Faint,"Not connected");
 
@@ -123,7 +123,7 @@ namespace RhinoAI
 
             var side=new Panel{Dock=DockStyle.Left,Width=Theme.S(176),BackColor=Theme.Side};
             var menu=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,BackColor=Theme.Side,Padding=new Padding(Theme.S(10),Theme.S(14),Theme.S(10),Theme.S(8))};menu.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-            menu.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(46)));menu.Controls.Add(new Label{Text="Rhino AI",Font=Theme.Title(),Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(Theme.S(8),0,0,Theme.S(6)),Margin=Padding.Empty},0,0);
+            menu.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(46)));menu.Controls.Add(new Label{Text="Rhino to Comfy",Font=Theme.Title(),Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(Theme.S(8),0,0,Theme.S(6)),Margin=Padding.Empty},0,0);
             string[] names={"Sync","Layer materials","Background blend","Export settings"};
             for(int i=0;i<names.Length;i++)
             {
@@ -160,7 +160,7 @@ namespace RhinoAI
         static FlatButton Button(string text,Action action,ButtonKind kind=ButtonKind.Secondary)
         {
             var button=new FlatButton{Text=text,Kind=kind,AutoSize=true,Font=kind==ButtonKind.Primary?Theme.Strong():Theme.Body(),Margin=new Padding(0,0,Theme.S(8),0)};
-            button.Click+=(s,e)=>{try{action();}catch(Exception error){MessageBox.Show(error.Message,"Rhino AI");}};return button;
+            button.Click+=(s,e)=>{try{action();}catch(Exception error){MessageBox.Show(error.Message,"Rhino to Comfy");}};return button;
         }
         static Control Pair(Control field,Control button)
         {
@@ -225,7 +225,7 @@ namespace RhinoAI
             layers.EndEdit();foreach(DataGridViewRow row in layers.Rows){var l=(LayerRule)row.Tag;l.Material=Convert.ToString(row.Cells[2].Value).Trim();if(string.IsNullOrWhiteSpace(l.Material))throw new ArgumentException("Enter a target material for layer: "+l.Name);}
             config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.TargetWorkflow=SelectedTarget();config.LongEdge=(int)edge.Value;config.LockSceneAspect=sceneAspect.Checked;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.MatchWallpaperAspect=wallpaperAspect.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;
         }
-        void ApplyColors(){uint undo=doc.BeginUndoRecord("Rhino AI layer color codes");try{foreach(var rule in config.Layers){var layer=doc.Layers.FindId(new Guid(rule.Id));if(layer!=null){layer.Color=ColorTranslator.FromHtml(rule.Color);}}}finally{doc.EndUndoRecord(undo);}doc.Views.Redraw();Log("ID colors applied to the layer display colors. Undo is supported.");}
+        void ApplyColors(){uint undo=doc.BeginUndoRecord("Rhino to Comfy layer color codes");try{foreach(var rule in config.Layers){var layer=doc.Layers.FindId(new Guid(rule.Id));if(layer!=null){layer.Color=ColorTranslator.FromHtml(rule.Color);}}}finally{doc.EndUndoRecord(undo);}doc.Views.Redraw();Log("ID colors applied to the layer display colors. Undo is supported.");}
         void AssignHighContrastColors()
         {
             int slot=1;foreach(var rule in config.Layers.OrderBy(l=>l.Index))rule.Color=Raster.Hex(Raster.Palette(slot++));
@@ -233,7 +233,7 @@ namespace RhinoAI
         }
         void ApplyMaterials()
         {
-            uint undo=doc.BeginUndoRecord("Rhino AI layer materials");
+            uint undo=doc.BeginUndoRecord("Rhino to Comfy layer materials");
             try{foreach(var rule in config.Layers)
             {
                 var layer=doc.Layers.FindId(new Guid(rule.Id));if(layer==null)continue;
@@ -256,7 +256,7 @@ namespace RhinoAI
         {
             actions.Enabled=false;try
             {
-                if(RhinoDoc.ActiveDoc==null||RhinoDoc.ActiveDoc.RuntimeSerialNumber!=doc.RuntimeSerialNumber)throw new InvalidOperationException("The active document changed. Close this panel and run RhinoAI again.");
+                if(RhinoDoc.ActiveDoc==null||RhinoDoc.ActiveDoc.RuntimeSerialNumber!=doc.RuntimeSerialNumber)throw new InvalidOperationException("The active document changed. Close this panel and run Rhino2Comfy again.");
                 Read();config.Save();Log("Reading viewport and geometry…");var snapshot=Exporter.Capture(doc,config);Log("Rendering "+snapshot.Camera.Width+" × "+snapshot.Camera.Height+" control images…");
                 last=await Task.Run(()=>Exporter.Render(snapshot,config,p=>{if(!IsDisposed)BeginInvoke((Action)(()=>progress.Value=p));}));
                 Log("Exported: "+last.Directory);foreach(var warning in last.Warnings)Log(warning);

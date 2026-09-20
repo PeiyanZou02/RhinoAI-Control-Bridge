@@ -1,4 +1,4 @@
-# Rhino AI Control Bridge
+# Rhino to Comfy
 
 [English](README.md)
 
@@ -37,9 +37,9 @@
 1. 下载 `dist/RhinoAI.rhp`，或者从源码构建。
 2. 把 `.rhp` 拖入 Rhino 8，或运行 `PlugInManager`，点击 **Install** 并选择该文件。
 3. 如有提示，重启 Rhino。
-4. 在 Rhino 命令栏运行 `RhinoAI`。
+4. 在 Rhino 命令栏运行 `Rhino2Comfy`。
 
-命令 `RhinoAIExport` 会按已保存设置直接导出，但不会打开插件面板。
+命令 `Rhino2ComfyExport` 会按已保存设置直接导出，但不会打开插件面板。
 
 ### ComfyUI 同步扩展
 
@@ -57,13 +57,24 @@
 
 首次安装后重启 ComfyUI。只更新前端文件时，先保存工作流，再在 ComfyUI Desktop 画布中按 **F5**。
 
-## 日常使用
+## 面板
 
-插件面板为英文界面，下文中的粗体英文即面板上的按钮和选项名称。
+运行 `Rhino2Comfy` 打开面板。面板为英文界面，包含四个页面和一条操作栏。
+
+| 页面 | 内容 |
+| --- | --- |
+| **Sync** | 目标工作流、ComfyUI 实时状态行、仅导出选中对象、自动上传 |
+| **Layer materials** | 每个 Rhino 图层一行，显示编码色，并填写目标材质 |
+| **Background blend** | 把 Rhino 对象融合进视口 Wallpaper 背景照片 |
+| **Export settings** | ComfyUI 地址、导出目录、可选的 API 工作流、输出尺寸和固定宽屏画幅 |
+
+**Update to ComfyUI** 会导出并发布图片。**Export only** 只写文件，不连接 ComfyUI。鼠标悬停在任意选项上可以看到简短说明。
+
+## 日常使用
 
 1. 启动 ComfyUI，打开包含 Batch Images 并连接生图模型的工作流。
 2. 在 Rhino 中打开模型并激活要导出的视口。
-3. 输入 `RhinoAI` 打开插件。
+3. 输入 `Rhino2Comfy` 打开插件。
 4. 检查图层与目标材质表。不同 Material ID 的部件放入不同 Rhino 图层。
 5. 在 **Sync** 页的 **Target workflow** 下拉框中选择要更新的 ComfyUI 文件，或保持 **Follow the current ComfyUI window**。
 6. 在 Rhino 中点击 **Update to ComfyUI**。如果选择了目标文件，ComfyUI 会自动切到该文件再更新。
@@ -72,10 +83,10 @@
 
 ### 选择目标工作流
 
-下拉框列出 ComfyUI 中已保存的全部工作流，按修改时间倒序排列，点击“刷新”可重新读取。
+下拉框列出 ComfyUI 中已保存的全部工作流，按修改时间倒序排列，点击 **Refresh** 可重新读取。
 
-- 选择具体文件后，每次点击“更新到 ComfyUI”，ComfyUI 会打开或切到该文件的标签页，再更新其中的 Batch Images。原先标签页中未保存的修改会保留。
-- 如果你随后自己切到别的文件，那个文件不会被改动。ComfyUI 底部的 Rhino 按钮会显示“目标是 X · 点击切换”。
+- 选择具体文件后，每次点击 **Update to ComfyUI**，ComfyUI 会打开或切到该文件的标签页，再更新其中的 Batch Images。原先标签页中未保存的修改会保留。
+- 如果你随后自己切到别的文件，那个文件不会被改动。ComfyUI 底部的 Rhino 按钮会显示 "target is X · click to switch"。
 - 自动同步只上传图片，不会切换 ComfyUI 窗口。
 - 下拉框下方的状态行显示 ComfyUI 当前显示的文件，以及已接入的图片数量。
 
@@ -85,9 +96,9 @@
 
 工作流中已有多个 Batch Images 时，先选中要接入的那一个，再点击 Rhino 按钮。
 
-更换模型、视角、选择或材质后不会自动生成。再次点击“更新到 ComfyUI”即可发布新的输入图片。
+更换模型、视角、选择或材质后不会自动生成。再次点击 **Update to ComfyUI** 即可发布新的输入图片。
 
-普通场景模式保持原来的 9 张控制图，并默认开启“普通场景固定旧版宽屏比例（1024 × 589）”。调整 Rhino 窗口、打开侧边栏或移动插件窗口都不会再把输出变成正方形；插件会对所有控制图使用同一个相机子视锥，Perspective 保持一致。只有开启 Wallpaper 产品佩戴模式时，才会使用参考底图、placement、scale-lock、局部放大和 inpaint 规则。
+普通场景模式保持原来的 9 张控制图，并默认开启**Lock widescreen frame 1024 × 589**。调整 Rhino 窗口、打开侧边栏或移动插件窗口都不会再把输出变成正方形；插件会对所有控制图使用同一个相机子视锥，Perspective 保持一致。只有开启 Wallpaper 产品佩戴模式时，才会使用参考底图、placement、scale-lock、局部放大和 inpaint 规则。
 
 ## 背景图融合（Background blend）
 
@@ -99,7 +110,7 @@
 
 全画幅 `reference` 和 `placement` 决定最终构图、位置与尺度。只有 `reference` 可以决定最终画面的彩色或黑白模式、曝光、对比度、明暗层次、色彩和背景，其他技术控制图不能让结果染色或变灰。`scale_lock.png` 在完整画幅中标记对象的精确轮廓、外接框和中心；其底图现在保持 reference 的原始明暗，其中紫色轮廓、矩形框和十字仅是不可见的测量信息，绝不能出现在最终成图中。自动提示词会在图片职责说明的开头和结尾重复外观锁定与清理要求。放大的 `*_detail` 图片只提供造型与材质细节，不能改变最终产品的大小和位置。
 
-保持“按 Wallpaper 原图比例输出”开启时，Portrait 参考图会直接生成竖幅结果。插件会先以足够的中间分辨率捕获完整 Rhino 视口，再裁出对应的相机子视锥，并把同一竖幅画布用于 reference、placement、rendered、全部几何控制图及蒙版；不会拉伸或旋转照片。
+保持 **Match the Wallpaper aspect ratio** 开启时，Portrait 参考图会直接生成竖幅结果。插件会先以足够的中间分辨率捕获完整 Rhino 视口，再裁出对应的相机子视锥，并把同一竖幅画布用于 reference、placement、rendered、全部几何控制图及蒙版；不会拉伸或旋转照片。
 
 若需要严格保持蒙版外像素，应在工作流中使用 `inpaint_mask.png`，并把生成区域重新合成到 `reference.png`。单靠文字提示不能保证蒙版外每一个像素完全不变。
 
@@ -126,7 +137,7 @@
 
 同一次导出的基础控制图使用完全相同的相机和透视。Portrait 输出和局部细节图都使用从原视角裁切出的相机子视锥，不改变相机位置或镜头，因此 Perspective 保持一致。
 
-Material ID 现在使用黑色背景，并严格跟随 Rhino 图层显示颜色。插件会把完全相同的 HEX 编码写进材质映射 Prompt。相邻部件不容易区分时，可以点击“一键分配高对比图层颜色”。正在使用的图层必须采用不同的非黑色颜色，避免材质区域含混或消失。
+Material ID 现在使用黑色背景，并严格跟随 Rhino 图层显示颜色。插件会把完全相同的 HEX 编码写进材质映射 Prompt。相邻部件不容易区分时，可以点击 **Assign contrast colors**。正在使用的图层必须采用不同的非黑色颜色，避免材质区域含混或消失。
 
 ## 构建与测试
 
