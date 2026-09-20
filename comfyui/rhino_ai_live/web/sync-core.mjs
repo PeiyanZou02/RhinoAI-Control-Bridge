@@ -13,7 +13,18 @@ const settle = () => new Promise(resolve => {
 });
 export function validateManifest(data) {
   if (data?.schema !== "rhino-ai-live/1" || typeof data.revision !== "string" || !data.images) return false;
+  if (data.target !== undefined && !validTarget(data.target)) return false;
   return Object.entries(data.images).every(([key, path]) => /^[a-z_0-9]+$/.test(key) && typeof path === "string" && /^rhino_ai\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+\.png$/.test(path));
+}
+function validTarget(target) {
+  const name=target?.workflow;
+  return typeof name==="string" && typeof target.request==="string" && /^[^\\:*?"<>|]+\.json$/.test(name) && !name.startsWith("/") && !name.split("/").includes("..");
+}
+// Workflow paths are reported by ComfyUI as "workflows/<name>"; Rhino stores "<name>".
+export function workflowName(path) { return String(path||"").replace(/^workflows\//,""); }
+export function targetState(data, activePath) {
+  if(!data?.target?.workflow) return "follow";
+  return workflowName(activePath)===data.target.workflow ? "match" : "mismatch";
 }
 
 const ROLE_START = "Use the supplied input images according to the exact roles below.";
@@ -132,15 +143,32 @@ function placeholder(node) {
   return !value || /^api_nano_banana_pro_input_image_\d+\.png$/.test(value);
 }
 
-export function findUnfilledNanoBatch(graph) {
+// Model-agnostic: any single Batch whose inputs are all placeholders or RHINO loaders.
+export function findUnfilledBatch(graph) {
   const candidates=graph._nodes.filter(batch=> {
     if(batch.type!=="BatchImagesNode" || batch.properties?.rhino_ai_live!==undefined)return false;
-    const targets=(batch.outputs?.[0]?.links||[]).map(id=>linkAt(graph,id)).filter(Boolean).map(l=>graph.getNodeById(l.target_id));
-    if(!targets.some(n=>n?.type==="GeminiImage2Node"))return false;
     const sources=(batch.inputs||[]).filter(i=>i.type==="IMAGE"&&i.link!=null).map(i=>linkAt(graph,i.link)).filter(Boolean).map(l=>graph.getNodeById(l.origin_id));
     return sources.length>0 && sources.every(n=>placeholder(n)||/^RHINO:/i.test(n?.title||""));
   });
   return candidates.length===1?candidates[0]:null;
+}
+
+export const findUnfilledNanoBatch=findUnfilledBatch;
+
+// Empty workflow: create only a Batch Images node plus the Rhino loaders.
+// No generator is created or assumed; the user wires the output to any model.
+export async function insertInputGroup(graph, data, createNode, origin=[0,0]) {
+  const batch=createNode("BatchImagesNode");
+  if(!batch)throw new Error("BatchImagesNode unavailable");
+  batch.pos=[origin[0],origin[1]];graph.add(batch);
+  // A new node sets up its auto-grow sockets on the next frame; wiring earlier loses links.
+  await settle();
+  await bindBatch(graph,batch,data,createNode);
+  // Compact three-row grid to the left of the Batch instead of one tall column.
+  const loaders=graph._nodes.filter(n=>n.type==="LoadImage"&&n.properties?.rhino_ai_batch===String(batch.id));
+  const columns=Math.ceil(loaders.length/3);
+  loaders.forEach((loader,i)=>{loader.pos=[origin[0]-380*(columns-Math.floor(i/3)),origin[1]+(i%3)*360];});
+  return batch;
 }
 
 // Explicitly bind one Batch Images node. Original LoadImage nodes remain on the canvas.

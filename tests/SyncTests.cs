@@ -28,6 +28,8 @@ namespace RhinoAI
                     string folder=await parts.First(x=>x.Headers.ContentDisposition.Name.Trim('"')=="subfolder").ReadAsStringAsync();
                     return Reply(new JObject{["name"]="server_"+filename,["subfolder"]=folder}.ToString());
                 }
+                if(request.Method==HttpMethod.Get&&path=="/userdata")return Reply("[{\"path\":\"old.json\",\"modified\":1},{\"path\":\"sub\\\\new.json\",\"modified\":9},{\"path\":\"notes.txt\",\"modified\":5}]");
+                if(request.Method==HttpMethod.Get&&path=="/userdata/rhino_ai_frontend_status.json")return Reply("{\"version\":22,\"state\":\"bound\",\"active\":\"CHOGA.json\",\"images\":9}");
                 if(request.Method==HttpMethod.Post&&path=="/userdata/rhino_ai_latest.json"){Published=JObject.Parse(await request.Content.ReadAsStringAsync());return Reply("{}");}
                 throw new Exception("Forbidden/unexpected request: "+request.Method+" "+path);
             }
@@ -51,6 +53,21 @@ namespace RhinoAI
             check(((string)recorder.Published["prompts"]["placement_constraint"]).Contains("MANDATORY REFERENCE APPEARANCE LOCK"),"reference appearance remains authoritative over technical inputs");
             check(recorder.Published["prompts"]["positive_prompt"]==null&&recorder.Published["prompts"]["wear_prompt"]==null,"no unrelated automatic style prompt published");
             check(!recorder.Published.ToString().Contains("api_key"),"no API credentials transmitted");
+            check(recorder.Published["target"]==null,"no target published when following the active ComfyUI window");
+            var targeted=new Recorder();var targetConfig=new Config{Workflow="",TargetWorkflow="CHOGA.json"};
+            Func<bool,string> publish=switchWindow=>{Task.Run(async()=>{using(var client=new ComfyClient("http://localhost:8000",targeted))await client.Send(export,targetConfig,switchWindow);}).GetAwaiter().GetResult();return (string)targeted.Published["target"]["request"];};
+            string first=publish(true);check((string)targeted.Published["target"]["workflow"]=="CHOGA.json"&&first.Length==32,"target workflow and request id published");
+            check(publish(false)==first,"automatic sync repeats the request id, so ComfyUI is not pulled back to the target");
+            check(publish(true)!=first,"explicit update issues a new switch request");
+            targetConfig.TargetWorkflow="other.json";check(publish(false)!=first&&(string)targeted.Published["target"]["workflow"]=="other.json","changing the target always issues a new request");
+            check(targeted.Calls.All(x=>!x.Contains("/prompt")&&!x.Contains("/queue")),"target publishing uses no generation or queue requests");
+            var browser=new Recorder();List<string> listed=null;JObject status=null;
+            Task.Run(async()=>{using(var client=new ComfyClient("http://localhost:8000",browser)){listed=await client.ListWorkflows();status=await client.FrontendStatus();}}).GetAwaiter().GetResult();
+            check(listed.Count==2&&listed[0]=="sub/new.json"&&listed[1]=="old.json","workflows listed newest first, json only, forward slashes");
+            check(browser.Calls.All(x=>x.StartsWith("GET ")),"browsing workflows is read-only");
+            check(ComfyClient.DescribeStatus(status,"CHOGA.json").Contains("已接入 9 张"),"bound status described");
+            check(ComfyClient.DescribeStatus(status,"xxx.json").Contains("等待切换到 xxx.json"),"mismatched window described as waiting");
+            check(ComfyClient.DescribeStatus(new JObject{["version"]=21,["state"]="bound"},"").Contains("过旧"),"outdated ComfyUI extension reported");
             var failed=new Recorder{FailUpload=true};bool rejected=false;
             try{Task.Run(async()=>{using(var client=new ComfyClient("http://localhost:8000",failed))await client.Send(export,config);}).GetAwaiter().GetResult();}catch{rejected=true;}
             check(rejected&&failed.Published==null,"upload failure leaves previous live manifest intact");

@@ -1,8 +1,24 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { validateManifest, bindBatch, updateGraph, findUnfilledNanoBatch, batchConnected, channelsFor, seedPrompt, migrateBatchPrompt } from "./sync-core.mjs?v=21";
+import { validateManifest, bindBatch, updateGraph, findUnfilledBatch, batchConnected, channelsFor, seedPrompt, migrateBatchPrompt, targetState, workflowName, insertInputGroup } from "./sync-core.mjs?v=22";
 
-let latest=null, polling=false, statusButton=null, lastReport="";
+let latest=null, polling=false, statusButton=null, lastReport="", pendingTarget=null, handledRequest=null, sawManifest=false;
+const REQUEST_KEY="rhino_ai_target_request";
+try{handledRequest=sessionStorage.getItem(REQUEST_KEY);}catch{}
+const workflows=()=>app.extensionManager?.workflow;
+const activePath=()=>workflows()?.activeWorkflow?.path;
+function markHandled(request) {handledRequest=request;try{sessionStorage.setItem(REQUEST_KEY,request);}catch{}}
+// Mirrors the frontend's own workflowService.openWorkflow: the current tab's
+// draft is persisted by loadGraphData before the target graph is shown.
+async function openTarget(name) {
+  const store=workflows();
+  if(!store?.getWorkflowByPath||typeof app.loadGraphData!=="function")throw new Error("此 ComfyUI 版本不支持自动切换，请手动打开 "+name);
+  let workflow=store.getWorkflowByPath("workflows/"+name);
+  if(!workflow){await store.syncWorkflows?.();workflow=store.getWorkflowByPath("workflows/"+name);}
+  if(!workflow)throw new Error("找不到工作流："+name);
+  if(!workflow.isLoaded)await workflow.load();
+  await app.loadGraphData(JSON.parse(JSON.stringify(workflow.activeState)),true,true,workflow,{checkForRerouteMigration:false,deferWarnings:true});
+}
 const makeNode=type=>globalThis.LiteGraph.createNode(type);
 function setImage(node,path,revision) {
   node.imgs=[];node.imageIndex=0;
@@ -19,8 +35,20 @@ async function poll() {
     if(!response.ok){showStatus("Rhino：等待图片 · 点击接入 Batch");return;}
     const data=await response.json();if(!validateManifest(data))throw new Error("同步清单格式不正确");
     latest=data;if(!app.graph)return;
+    // A target left over from an earlier session must not move the user on startup.
+    if(!sawManifest){sawManifest=true;if(handledRequest===null&&data.target)markHandled(data.target.request);}
+    pendingTarget=null;
+    if(targetState(data,activePath())==="mismatch") {
+      const name=data.target.workflow;
+      if(data.target.request!==handledRequest){markHandled(data.target.request);showStatus("Rhino：正在切换到 "+name+"…");await openTarget(name);}
+      if(targetState(data,activePath())==="mismatch") {
+        // The user is looking at another file: leave its graph untouched.
+        pendingTarget=name;showStatus(`Rhino：目标是 ${name} · 点击切换`);
+        await report("waiting_target",{revision:data.revision,target:name});return;
+      }
+    }
     for(const batch of app.graph._nodes.filter(n=>n.type==="BatchImagesNode"&&n.properties?.rhino_ai_live))migrateBatchPrompt(app.graph,batch);
-    const candidate=findUnfilledNanoBatch(app.graph);
+    const candidate=findUnfilledBatch(app.graph);
     if(candidate){await bindBatch(app.graph,candidate,data,makeNode);seedPrompt(app.graph,candidate,data);}
     await updateGraph(app.graph,data,makeNode,setImage);
     const batches=app.graph._nodes.filter(n=>n.type==="BatchImagesNode"&&n.properties?.rhino_ai_live&&batchConnected(app.graph,n,data));
@@ -37,26 +65,36 @@ function showStatus(text,error=false) {
   if(statusButton){statusButton.textContent=text;statusButton.style.borderColor=error?"#e56767":"#42b99d";}
 }
 async function report(state,detail={}) {
-  const payload={schema:"rhino-ai-frontend/1",version:21,state,...detail};
+  const payload={schema:"rhino-ai-frontend/1",version:22,state,active:workflowName(activePath())||null,open:(workflows()?.openWorkflows||[]).map(w=>workflowName(w.path)),...detail};
   const serialized=JSON.stringify(payload);if(serialized===lastReport)return;
   try {const result=await api.fetchApi("/userdata/rhino_ai_frontend_status.json?overwrite=true",{method:"POST",headers:{"Content-Type":"application/json"},body:serialized});if(result.ok)lastReport=serialized;}catch{}
 }
+function viewCenter() {
+  const ds=app.canvas?.ds,element=app.canvas?.canvas;if(!ds||!element)return [0,0];
+  const box=element.getBoundingClientRect();
+  return [Math.round(box.width/2/ds.scale-ds.offset[0]),Math.round(box.height/2/ds.scale-ds.offset[1])];
+}
 async function connectCurrent() {
   await poll();if(!latest){alert("请先在 Rhino 点击“更新到 ComfyUI”。");return;}
+  if(pendingTarget){await openTarget(pendingTarget);await poll();return;}
+  if(!app.graph._nodes.some(n=>n.type==="BatchImagesNode")) {
+    const batch=await insertInputGroup(app.graph,latest,makeNode,viewCenter());
+    app.canvas?.selectNode?.(batch);app.graph.setDirtyCanvas(true,true);await poll();return;
+  }
   const selected=Object.values(app.canvas?.selected_nodes||{}).filter(n=>n.type==="BatchImagesNode");
   const candidates=selected.length?selected:app.graph._nodes.filter(n=>n.type==="BatchImagesNode");
   if(candidates.length!==1){alert("请先选中要接入的一个 Batch Images 节点。");return;}
   const fresh=!candidates[0].properties?.rhino_ai_live;
   await bindBatch(app.graph,candidates[0],latest,makeNode);if(fresh)seedPrompt(app.graph,candidates[0],latest);await poll();
 }
-if(!globalThis[Symbol.for("RhinoAI.Live.ImagesAndRoles.v21")]) {
-globalThis[Symbol.for("RhinoAI.Live.ImagesAndRoles.v21")]=true;
+if(!globalThis[Symbol.for("RhinoAI.Live.ImagesAndRoles.v22")]) {
+globalThis[Symbol.for("RhinoAI.Live.ImagesAndRoles.v22")]=true;
 app.registerExtension({
   name:"RhinoAI.Live.ImagesOnly",
   setup(){
     statusButton=document.getElementById("rhino-ai-sync-status")||document.createElement("button");statusButton.id="rhino-ai-sync-status";statusButton.type="button";
     statusButton.style.cssText="position:fixed;bottom:24px;left:360px;z-index:1000;padding:10px 16px;border:1px solid #42b99d;border-radius:8px;background:#192725;color:#eef7f4;font:13px system-ui;cursor:pointer;max-width:60vw";
-    statusButton.title="同步 Batch 图片和对应的输入职责说明，不生成；保留你自己写的 prompt。";
+    statusButton.title="同步 Batch 图片和输入职责说明，不生成。空白工作流中点击会插入 Batch Images 和 Rhino 图片节点。";
     statusButton.addEventListener("click",()=>connectCurrent().catch(e=>showStatus(e.message,true)));document.body.append(statusButton);
     showStatus("Rhino：同步扩展已加载");report("loaded");setInterval(poll,2000);poll();
   },

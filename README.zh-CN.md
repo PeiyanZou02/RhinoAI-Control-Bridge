@@ -25,7 +25,7 @@
 - Windows 10/11
 - Rhino 8
 - 本机 ComfyUI 或 ComfyUI Desktop
-- 从源码构建时需要 PowerShell 7
+- 从源码构建时需要 PowerShell 7 或系统自带的 Windows PowerShell 5.1
 - 支持多图输入的 ComfyUI 生图节点或工作流
 
 默认服务地址为 `http://127.0.0.1:8000`。如果你的 ComfyUI 使用 `8188` 等其他端口，可直接在 Rhino 面板中修改。
@@ -63,10 +63,25 @@
 2. 在 Rhino 中打开模型并激活要导出的视口。
 3. 输入 `RhinoAI` 打开插件。
 4. 检查图层与目标材质表。不同 Material ID 的部件放入不同 Rhino 图层。
-5. 在 ComfyUI 中选择目标 Batch Images；如果尚未绑定，使用 Rhino 接入操作绑定它。
-6. 在 Rhino 中点击“更新到 ComfyUI”。
+5. 在“同步”页的 **目标工作流** 下拉框中选择要更新的 ComfyUI 文件，或保持“跟随 ComfyUI 当前窗口”。
+6. 在 Rhino 中点击“更新到 ComfyUI”。如果选择了目标文件，ComfyUI 会自动切到该文件再更新。
 7. 在 ComfyUI 中填写或修改自己的 Prompt。
 8. 由你手动点击 **Run**。
+
+### 选择目标工作流
+
+下拉框列出 ComfyUI 中已保存的全部工作流，按修改时间倒序排列，点击“刷新”可重新读取。
+
+- 选择具体文件后，每次点击“更新到 ComfyUI”，ComfyUI 会打开或切到该文件的标签页，再更新其中的 Batch Images。原先标签页中未保存的修改会保留。
+- 如果你随后自己切到别的文件，那个文件不会被改动。ComfyUI 底部的 Rhino 按钮会显示“目标是 X · 点击切换”。
+- 自动同步只上传图片，不会切换 ComfyUI 窗口。
+- 下拉框下方的状态行显示 ComfyUI 当前显示的文件，以及已接入的图片数量。
+
+### 在新工作流中接入
+
+在没有 Batch Images 节点的工作流里点击 ComfyUI 底部的 Rhino 按钮，会在画布中央插入一个 Batch Images 节点和全部 Rhino 图片节点。插件不会创建或假设任何生图节点，把 Batch Images 的输出连到你使用的任意模型或 API 节点即可。
+
+工作流中已有多个 Batch Images 时，先选中要接入的那一个，再点击 Rhino 按钮。
 
 更换产品、视角、选择或材质后不会自动生成。再次点击“更新到 ComfyUI”即可发布新的输入图片。
 
@@ -119,7 +134,7 @@ Material ID 现在使用黑色背景，并严格跟随 Rhino 图层显示颜色�
 node .\tests\sync-core.test.mjs
 ```
 
-构建脚本使用已安装的 Rhino 8 `RhinoCommon.dll` 和 PowerShell 7 自带的 Roslyn 编译器，输出文件为 `dist/RhinoAI.rhp`。
+构建脚本使用已安装的 Rhino 8 `RhinoCommon.dll`。在 PowerShell 7 中使用其自带的 Roslyn 编译器；在 Windows PowerShell 5.1 中自动改用 Rhino 8 自带的 Roslyn，因此无需另装 PowerShell 7。输出文件为 `dist/RhinoAI.rhp`。
 
 同步测试会验证插件只上传和发布输入，不调用 ComfyUI 的 Prompt 或 Queue 接口。
 

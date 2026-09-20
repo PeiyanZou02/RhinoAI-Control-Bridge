@@ -20,11 +20,44 @@ namespace RhinoAI
             client=new HttpClient(handler){BaseAddress=uri,Timeout=TimeSpan.FromSeconds(90)};
         }
         public void Dispose(){client.Dispose();}
+        public TimeSpan Timeout{set{client.Timeout=value;}}
         async Task<JObject> Json(HttpResponseMessage response)
         {
             using(response){string text=await response.Content.ReadAsStringAsync();if(!response.IsSuccessStatusCode)throw new InvalidOperationException("ComfyUI HTTP "+(int)response.StatusCode+": "+text);return JObject.Parse(text);}
         }
         public async Task Check(){await Json(await client.GetAsync("system_stats"));}
+        // Saved ComfyUI workflows, newest first. Paths are relative to the user's workflows folder.
+        public async Task<List<string>> ListWorkflows()
+        {
+            using(var response=await client.GetAsync("userdata?dir=workflows&recurse=true&split=false&full_info=true"))
+            {
+                if(response.StatusCode==System.Net.HttpStatusCode.NotFound)return new List<string>();
+                string text=await response.Content.ReadAsStringAsync();
+                if(!response.IsSuccessStatusCode)throw new InvalidOperationException("ComfyUI HTTP "+(int)response.StatusCode+": "+text);
+                return JArray.Parse(text).OfType<JObject>().Where(x=>((string)x["path"]??"").EndsWith(".json",StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(x=>(long?)x["modified"]??0).Select(x=>((string)x["path"]).Replace('\\','/')).ToList();
+            }
+        }
+        // What the ComfyUI window last reported about itself; null when the extension has never run.
+        public async Task<JObject> FrontendStatus()
+        {
+            using(var response=await client.GetAsync("userdata/rhino_ai_frontend_status.json"))
+            {
+                if(!response.IsSuccessStatusCode)return null;
+                try{return JObject.Parse(await response.Content.ReadAsStringAsync());}catch(JsonException){return null;}
+            }
+        }
+        public static string DescribeStatus(JObject status,string target)
+        {
+            if(status==null)return "ComfyUI 窗口尚未加载同步扩展";
+            if(((int?)status["version"]??0)<22)return "ComfyUI 同步扩展版本过旧：请重新运行 install-comfy-extension.ps1，然后在 ComfyUI 按 F5";
+            string active=(string)status["active"],state=(string)status["state"];
+            string where=string.IsNullOrEmpty(active)?"ComfyUI 未保存的工作流":"ComfyUI 正在显示 "+active;
+            if(state=="error")return where+" · 同步失败："+(string)status["message"];
+            if(state=="waiting_target"||(!string.IsNullOrEmpty(target)&&!string.IsNullOrEmpty(active)&&active!=target))return where+" · 等待切换到 "+target;
+            if(state=="bound")return where+" · 已接入 "+(int?)status["images"]+" 张";
+            return where+" · 尚未接入 Batch";
+        }
         public async Task<string> Upload(string path,string folder)
         {
             using(var form=new MultipartFormDataContent())using(var stream=File.OpenRead(path))
@@ -72,7 +105,8 @@ namespace RhinoAI
             } return graph;
         }
         // Upload immutable batches, then publish one complete manifest. Never execute a workflow.
-        public async Task<string> Send(ExportResult export,Config config)
+        public Task<string> Send(ExportResult export,Config config){return Send(export,config,true);}
+        public async Task<string> Send(ExportResult export,Config config,bool switchWindow)
         {
             await Check();JObject template=null;
             var selected=SelectForBatch(export.Files,config);
@@ -91,11 +125,21 @@ namespace RhinoAI
             File.WriteAllText(Path.Combine(export.Directory,"comfy_preview.workflow.json"),PreviewUi(uploaded).ToString(),Encoding.UTF8);
             string userPrompt=config.ProductMode?string.Join("\n",new[]{string.IsNullOrWhiteSpace(config.Product)?null:"Product: "+config.Product,config.WearInstructions}.Where(x=>!string.IsNullOrWhiteSpace(x))):"";
             var manifest=new JObject{["schema"]="rhino-ai-live/1",["revision"]=Guid.NewGuid().ToString("N"),["images"]=JObject.FromObject(uploaded),["prompts"]=new JObject{["color_materials"]=export.Prompt??"",["user_prompt"]=userPrompt,["placement_constraint"]=export.PlacementConstraint??""},["input_profile"]=config.ProductMode?(config.DetailPriority?"detail_priority":"full_frame"):"scene"};
+            // An empty target follows whichever workflow the ComfyUI window shows. A new request id per
+            // publish lets the window switch once, without fighting the user afterwards.
+            if(!string.IsNullOrWhiteSpace(config.TargetWorkflow))
+            {
+                string name=config.TargetWorkflow.Trim();
+                // Automatic syncs repeat the previous request id, so the window is not pulled back to the target.
+                bool reuse=!switchWindow&&config.LastTargetRequestFor==name&&!string.IsNullOrEmpty(config.LastTargetRequest);
+                if(!reuse){config.LastTargetRequest=Guid.NewGuid().ToString("N");config.LastTargetRequestFor=name;}
+                manifest["target"]=new JObject{["workflow"]=name,["request"]=config.LastTargetRequest};
+            }
             // This is ComfyUI's user-file endpoint, not its execution endpoint.
             using(var response=await client.PostAsync("userdata/"+Uri.EscapeDataString("rhino_ai_latest.json")+"?overwrite=true",new StringContent(manifest.ToString(),Encoding.UTF8,"application/json")))
             {if(!response.IsSuccessStatusCode)throw new InvalidOperationException("图片已上传，但同步清单发布失败："+(int)response.StatusCode+" "+await response.Content.ReadAsStringAsync());}
             File.WriteAllText(Path.Combine(export.Directory,"comfy_sync.json"),manifest.ToString(),Encoding.UTF8);
-            return "图片与提示词已上传。请以 ComfyUI 画布底部的“Rhino：图片已接入 Batch”状态为准；没有 Rhino 按钮说明该窗口尚未加载同步扩展。生成由你手动点击 Run。";
+            return "图片与提示词已上传"+(string.IsNullOrWhiteSpace(config.TargetWorkflow)?"":"，目标 "+config.TargetWorkflow.Trim())+"。";
         }
         public static Dictionary<string,string> SelectForBatch(Dictionary<string,string> files,Config config)
         {

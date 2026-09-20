@@ -9,11 +9,11 @@ const base=new URL("../../",import.meta.url);
 async function diagnostic(state,message) {
   try {await fetch(new URL("api/userdata/rhino_ai_frontend_status.json?overwrite=true",base),{
     method:"POST",headers:{"Content-Type":"application/json","Comfy-User":"default"},
-    body:JSON.stringify({schema:"rhino-ai-frontend/1",version:21,state,message})
+    body:JSON.stringify({schema:"rhino-ai-frontend/1",version:22,state,message})
   });}catch{}
 }
 await diagnostic("bootstrap","Rhino frontend module entry point reached");
-try {await import("./main.mjs?v=21");}
+try {await import("./main.mjs?v=22");}
 catch(error) {
   badge.textContent="Rhino 扩展加载失败："+error.message;badge.style.borderColor="#e56767";
   await diagnostic("import_error",error.message);

@@ -25,7 +25,7 @@ The bridge updates images and prompt metadata only. It never presses Run, queues
 - Windows 10 or 11
 - Rhino 8
 - ComfyUI or ComfyUI Desktop running locally
-- PowerShell 7 for building from source
+- PowerShell 7 or the built-in Windows PowerShell 5.1 for building from source
 - A ComfyUI image model/workflow that accepts multiple image inputs
 
 The plug-in defaults to `http://127.0.0.1:8000`. Change the address in the Rhino panel if your ComfyUI server uses another port, such as `8188`.
@@ -63,10 +63,25 @@ Restart ComfyUI after the first installation. When updating only the frontend fi
 2. Open the Rhino model and activate the viewport to export.
 3. Run `RhinoAI`.
 4. Review the layer-to-material table. Put parts that need separate Material IDs on separate Rhino layers.
-5. In ComfyUI, select the intended Batch Images node and bind it with the Rhino action if it is not already bound.
-6. Click **Update to ComfyUI** in Rhino.
+5. On the **Sync** page, pick the ComfyUI file to update in the **Target workflow** list, or keep **Follow the current ComfyUI window**.
+6. Click **Update to ComfyUI** in Rhino. With a target selected, ComfyUI switches to that file first.
 7. Write or edit the creative prompt in ComfyUI.
 8. Click **Run** manually in ComfyUI.
+
+### Choosing the target workflow
+
+The list shows every workflow saved in ComfyUI, newest first. **Refresh** reads it again.
+
+- With a file selected, each **Update to ComfyUI** opens or activates that workflow's tab and then updates its Batch Images. Unsaved edits in the previous tab are kept.
+- If you later switch to another file yourself, that file is left untouched. The Rhino button at the bottom of ComfyUI shows the target and switches back on click.
+- Automatic sync only uploads images. It never switches the ComfyUI window.
+- The status line under the list shows which file ComfyUI is displaying and how many images are connected.
+
+### Connecting a new workflow
+
+In a workflow without a Batch Images node, click the Rhino button at the bottom of ComfyUI. It inserts one Batch Images node and all Rhino image loaders at the centre of the canvas. No image model is created or assumed, so connect the Batch Images output to any model or API node you use.
+
+When a workflow already has several Batch Images nodes, select the intended one before clicking the Rhino button.
 
 Changing a product, camera, selection, or material mapping does not start generation. Click **Update to ComfyUI** again to publish a new input batch.
 
@@ -119,7 +134,7 @@ Material IDs follow the Rhino layer display colors exactly, on a black backgroun
 node .\tests\sync-core.test.mjs
 ```
 
-The build uses the Rhino 8 `RhinoCommon.dll` already installed on the machine and the Roslyn compiler bundled with PowerShell 7. The output is `dist/RhinoAI.rhp`.
+The build uses the Rhino 8 `RhinoCommon.dll` already installed on the machine. PowerShell 7 supplies its bundled Roslyn compiler; Windows PowerShell 5.1 falls back to the Roslyn copy shipped with Rhino 8, so PowerShell 7 is optional. The output is `dist/RhinoAI.rhp`.
 
 The synchronization tests verify that the bridge uploads and publishes inputs without calling ComfyUI's prompt or queue endpoints.
 

@@ -24,6 +24,8 @@ namespace RhinoAI
         public string Server="http://127.0.0.1:8000";
         public string Output=Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),"RhinoAI Exports");
         public string Workflow="";
+        public string TargetWorkflow=""; // empty = follow the workflow currently shown in ComfyUI
+        public string LastTargetRequest="",LastTargetRequestFor="";
         public bool ProductMode=false,SelectedOnly=false;
         public bool MatchWallpaperAspect=true;
         public bool LockSceneAspect=true;
