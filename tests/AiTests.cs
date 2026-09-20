@@ -121,6 +121,15 @@ namespace RhinoAI
             Wait(async()=>{using(var client=new AiClient(styleVendor))return await client.Generate(AiProviders.Find("google"),new ProviderSettings(),"k","p",withStyle,1024,589,none);});
             check(JObject.Parse(styleVendor.Bodies[0]).SelectTokens("contents[0].parts[*].inlineData.mimeType").Select(x=>(string)x).SequenceEqual(new[]{"image/png","image/png","image/png","image/jpeg"}),"each image is sent with its real type");
 
+            var gemini=AiProviders.Find("google");
+            check(AiProviders.Frame(gemini,new ProviderSettings(),1024,589).SequenceEqual(new[]{16,9})&&AiProviders.Frame(gemini,new ProviderSettings{Aspect="4:5"},1024,589).SequenceEqual(new[]{4,5})&&AiProviders.Frame(AiProviders.Find("openai"),new ProviderSettings(),1024,589).SequenceEqual(new[]{3,2})&&AiProviders.Frame(AiProviders.Find("doubao"),new ProviderSettings(),1024,589)==null&&AiProviders.Frame(AiProviders.Find("doubao"),new ProviderSettings{Aspect="21:9"},1024,589).SequenceEqual(new[]{21,9})&&AiProviders.Frame(AiProviders.Find(AiProviders.Comfy),new ProviderSettings(),1024,589)==null,"the export frame follows the ratio the engine will really draw");
+            using(var wide=new System.Drawing.Bitmap(2752,1536))using(var canvas=System.Drawing.Graphics.FromImage(wide))using(var memory=new MemoryStream())
+            {
+                canvas.Clear(System.Drawing.Color.Red);canvas.FillRectangle(System.Drawing.Brushes.Blue,11,0,2730,1536);wide.Save(memory,System.Drawing.Imaging.ImageFormat.Png);
+                var fitted=new AiImage{Bytes=memory.ToArray()}.Fit(2048,1152);
+                using(var result=new System.Drawing.Bitmap(new MemoryStream(fitted.Bytes)))check(result.Width==2731&&result.Height==1536&&result.GetPixel(1,700).B==255&&result.GetPixel(2729,700).B==255,"a rounded vendor canvas is trimmed evenly to the exported ratio");
+                var same=new AiImage{Bytes=memory.ToArray()};var junk=new AiImage{Bytes=new byte[]{1,2,3}};check(ReferenceEquals(same.Fit(2752,1536),same)&&ReferenceEquals(junk.Fit(16,9),junk),"matching or unreadable results are left untouched");
+            }
             check(AiClient.NearestRatio(683,1024)=="2:3"&&AiClient.NearestRatio(1000,1000)=="1:1","nearest supported aspect ratio");
 
             // A 20 px square on a 64 px canvas: every outline must be a single pixel wide.
