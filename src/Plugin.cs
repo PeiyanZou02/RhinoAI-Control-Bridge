@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.26.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.26.1.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -175,6 +175,8 @@ namespace RhinoAI
             FormClosing+=(sender,args)=>{if(!actions.Enabled){args.Cancel=true;return;}try{Read();config.Save();}catch(Exception e){RhinoApp.WriteLine(e.Message);}};
             FormClosed+=(s,e)=>{if(watcher!=null)watcher.Dispose();tips.Dispose();mono.Dispose();};
             Shown+=async(s,e)=>await RefreshWorkflows(true);
+            // Views saved in Rhino while the panel is open appear as soon as the panel gets focus again.
+            Activated+=(s,e)=>{if(actions.Enabled)FillViews(TickedViews());};
             Log("Ready.");
         }
         void Go(int index){for(int i=0;i<pages.Count;i++){pages[i].Visible=i==index;nav[i].Selected=i==index;}}
@@ -264,9 +266,10 @@ namespace RhinoAI
         List<string> TickedViews(){return views.CheckedItems.Cast<string>().ToList();}
         void FillViews(List<string> ticked)
         {
-            views.BeginUpdate();views.Items.Clear();views.Items.Add(CurrentView,ticked.Contains(CurrentView));
-            if(doc!=null)for(int i=0;i<doc.NamedViews.Count;i++){string name=doc.NamedViews[i].Name;if(!string.IsNullOrEmpty(name)&&!views.Items.Contains(name))views.Items.Add(name,ticked.Contains(name));}
-            views.EndUpdate();
+            var names=new List<string>{CurrentView};
+            if(doc!=null)for(int i=0;i<doc.NamedViews.Count;i++){string name=doc.NamedViews[i].Name;if(!string.IsNullOrEmpty(name)&&!names.Contains(name))names.Add(name);}
+            if(names.SequenceEqual(views.Items.Cast<string>()))return;
+            views.BeginUpdate();views.Items.Clear();foreach(var name in names)views.Items.Add(name,ticked.Contains(name));views.EndUpdate();
         }
         // Each vendor keeps its own key, model and address, so switching engines loses nothing.
         void StoreEngine()
