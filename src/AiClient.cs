@@ -157,7 +157,7 @@ namespace RhinoAI
         {
             if(string.IsNullOrWhiteSpace(key))throw new InvalidOperationException("Enter the "+provider.Name+" API key, or set the "+provider.KeyVariable+" environment variable.");
             string root=(string.IsNullOrWhiteSpace(settings.BaseUrl)?provider.BaseUrl:settings.BaseUrl).Trim().TrimEnd('/'),model=string.IsNullOrWhiteSpace(settings.Model)?provider.Models[0]:settings.Model.Trim();
-            Uri uri;if(!Uri.TryCreate(root,UriKind.Absolute,out uri)||(uri.Scheme!="https"&&!uri.IsLoopback))throw new ArgumentException("The API address must start with https://.");
+            Uri uri;if(!Uri.TryCreate(root,UriKind.Absolute,out uri)||(uri.Scheme!="https"&&!uri.IsLoopback))throw new ArgumentException("The API address must start with https://. If you pasted the key there, move it to API key and clear the address to restore the default.");
             HttpRequestMessage request;
             if(provider.Id=="google")
             {

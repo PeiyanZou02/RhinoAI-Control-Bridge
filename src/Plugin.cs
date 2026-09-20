@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.26.1.0")]
+[assembly: System.Reflection.AssemblyVersion("0.26.2.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -148,7 +148,7 @@ namespace RhinoAI
 
             actions.Dock=DockStyle.Fill;actions.Margin=Padding.Empty;actions.Padding=new Padding(Theme.S(24),Theme.S(10),0,0);actions.WrapContents=false;
             actions.Controls.Add(Button("Update to ComfyUI",async delegate{await Export(true,false);},ButtonKind.Primary));actions.Controls.Add(Button("Export only",async delegate{await Export(false,false);}));
-            actions.Controls.Add(Button("Export folder",delegate{if(last!=null)Open(last.Directory);else if(Directory.Exists(output.Text))Open(output.Text);},ButtonKind.Ghost));actions.Controls.Add(Button("Open ComfyUI",delegate{Read();Open(config.Server);},ButtonKind.Ghost));
+            actions.Controls.Add(Tip(Button("Export folder",delegate{if(last!=null)Open(last.Directory);else if(Directory.Exists(output.Text))Open(output.Text);},ButtonKind.Ghost),"Opens the latest export, or the export folder."));actions.Controls.Add(Tip(Button("Change export folder",ChangeExportFolder,ButtonKind.Ghost),"Chooses where exports are written. The same setting as Export folder on the Export settings page."));actions.Controls.Add(Button("Open ComfyUI",delegate{Read();Open(config.Server);},ButtonKind.Ghost));
             log.Multiline=true;log.ReadOnly=true;log.BorderStyle=BorderStyle.None;log.ScrollBars=ScrollBars.None;log.Dock=DockStyle.Fill;log.BackColor=Theme.Bg;log.ForeColor=Theme.Muted;log.Font=mono;log.TabStop=false;
             var logHost=new Panel{Dock=DockStyle.Fill,Margin=Padding.Empty,Padding=new Padding(Theme.S(28),Theme.S(8),Theme.S(8),Theme.S(8))};logHost.Controls.Add(log);
 
@@ -277,7 +277,7 @@ namespace RhinoAI
             if(shown==null||shown.Id==AiProviders.Comfy)return;
             var settings=config.Provider(shown.Id);string key=apiKey.Text.Trim();
             if(key!=Secret.Reveal(settings.Key))settings.Key=Secret.Protect(key);
-            settings.Model=model.Text.Trim();settings.BaseUrl=apiUrl.Text.Trim()==shown.BaseUrl?"":apiUrl.Text.Trim();
+            settings.Model=model.Text.Trim();settings.BaseUrl=apiUrl.Text.Trim()==shown.BaseUrl?"":apiUrl.Text.Trim();if(settings.BaseUrl=="")apiUrl.Text=shown.BaseUrl;
         }
         void ShowEngine()
         {
@@ -388,6 +388,15 @@ namespace RhinoAI
             }
             catch(Exception e){Log("Not completed: "+e.Message+ (last==null?"":"\r\nExported files were kept: "+last.Directory));if(automatic)autoSync.Checked=false;}
             finally{actions.Enabled=true;}
+        }
+        void ChangeExportFolder()
+        {
+            using(var dlg=new FolderBrowserDialog{Description="Folder for Rhino to Comfy exports",ShowNewFolderButton=true})
+            {
+                if(Directory.Exists(output.Text))dlg.SelectedPath=output.Text;if(dlg.ShowDialog(this)!=DialogResult.OK)return;
+                // Forget the previous export so Export folder opens the new location.
+                output.Text=dlg.SelectedPath;config.Output=dlg.SelectedPath;config.Save();last=null;Log("Export folder: "+dlg.SelectedPath);
+            }
         }
         void Log(string message){log.AppendText(DateTime.Now.ToString("HH:mm:ss")+"  "+message+Environment.NewLine);}
         static void Open(string path){Process.Start(new ProcessStartInfo(path){UseShellExecute=true});}
