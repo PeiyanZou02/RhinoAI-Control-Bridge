@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { validateManifest, bindBatch, updateGraph, findUnfilledNanoBatch, batchConnected, channelsFor, seedPrompt, migrateBatchPrompt } from "./sync-core.mjs?v=19";
+import { validateManifest, bindBatch, updateGraph, findUnfilledNanoBatch, batchConnected, channelsFor, seedPrompt, migrateBatchPrompt } from "./sync-core.mjs?v=20";
 
 let latest=null, polling=false, statusButton=null, lastReport="";
 const makeNode=type=>globalThis.LiteGraph.createNode(type);
@@ -37,7 +37,7 @@ function showStatus(text,error=false) {
   if(statusButton){statusButton.textContent=text;statusButton.style.borderColor=error?"#e56767":"#42b99d";}
 }
 async function report(state,detail={}) {
-  const payload={schema:"rhino-ai-frontend/1",version:19,state,...detail};
+  const payload={schema:"rhino-ai-frontend/1",version:20,state,...detail};
   const serialized=JSON.stringify(payload);if(serialized===lastReport)return;
   try {const result=await api.fetchApi("/userdata/rhino_ai_frontend_status.json?overwrite=true",{method:"POST",headers:{"Content-Type":"application/json"},body:serialized});if(result.ok)lastReport=serialized;}catch{}
 }
@@ -49,8 +49,8 @@ async function connectCurrent() {
   const fresh=!candidates[0].properties?.rhino_ai_live;
   await bindBatch(app.graph,candidates[0],latest,makeNode);if(fresh)seedPrompt(app.graph,candidates[0],latest);await poll();
 }
-if(!globalThis[Symbol.for("RhinoAI.Live.ImagesAndRoles.v19")]) {
-globalThis[Symbol.for("RhinoAI.Live.ImagesAndRoles.v19")]=true;
+if(!globalThis[Symbol.for("RhinoAI.Live.ImagesAndRoles.v20")]) {
+globalThis[Symbol.for("RhinoAI.Live.ImagesAndRoles.v20")]=true;
 app.registerExtension({
   name:"RhinoAI.Live.ImagesOnly",
   setup(){

@@ -37,7 +37,7 @@ namespace RhinoAI
         {
             Directory.CreateDirectory(root);int count=0;
             Action<bool,string> check=(ok,name)=>{if(!ok)throw new Exception(name);count++;System.Console.WriteLine("PASS: "+name);};
-            var export=new ExportResult{Directory=root,Files=new Dictionary<string,string>{{"depth",png},{"normal",png}},Prompt="material",WearPrompt="wear",PlacementConstraint="FULL-FRAME PLACEMENT LOCK test"};
+            var export=new ExportResult{Directory=root,Files=new Dictionary<string,string>{{"depth",png},{"normal",png}},Prompt="material",WearPrompt="wear",PlacementConstraint="MANDATORY CLEAN FINAL OUTPUT. FULL-FRAME PLACEMENT LOCK test"};
             var config=new Config{Workflow="",ProductMode=true,Product="earring",WearInstructions="Replace the original earring at the aligned location."};var recorder=new Recorder();
             Task.Run(async()=>{using(var client=new ComfyClient("http://localhost:8000",recorder))await client.Send(export,config);}).GetAwaiter().GetResult();
             check(recorder.Calls.Count==4,"only health check, two uploads and manifest publish");
@@ -47,6 +47,7 @@ namespace RhinoAI
             check((string)recorder.Published["prompts"]["color_materials"]=="material","color-to-material mapping published with image batch");
             check(((string)recorder.Published["prompts"]["user_prompt"]).Contains("Replace the original earring"),"Rhino user instruction published with image batch");
             check(((string)recorder.Published["prompts"]["placement_constraint"]).Contains("FULL-FRAME PLACEMENT LOCK"),"numeric full-frame placement constraint published");
+            check(((string)recorder.Published["prompts"]["placement_constraint"]).Contains("MANDATORY CLEAN FINAL OUTPUT"),"technical scale-lock overlays are explicitly banned from final output");
             check(recorder.Published["prompts"]["positive_prompt"]==null&&recorder.Published["prompts"]["wear_prompt"]==null,"no unrelated automatic style prompt published");
             check(!recorder.Published.ToString().Contains("api_key"),"no API credentials transmitted");
             var failed=new Recorder{FailUpload=true};bool rejected=false;

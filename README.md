@@ -78,7 +78,7 @@ Changing a product, camera, selection, or material mapping does not start genera
 4. Enable Wallpaper product mode and enter the placement instruction.
 5. Export and update ComfyUI.
 
-The synchronized batch uses the full-frame reference and placement images as the authority for composition. `scale_lock.png` marks the exact product silhouette, bounding box, and center in that frame. Enlarged `*_detail` images provide geometry and material detail only; they must not change the final product's scale or position.
+The synchronized batch uses the full-frame reference and placement images as the authority for composition. `scale_lock.png` marks the exact product silhouette, bounding box, and center in that frame. Its magenta silhouette, rectangle, and crosshair are invisible measurement metadata and must never appear in the finished image. The generated prompt repeats this cleanup rule before and after the image-role instructions. Enlarged `*_detail` images provide geometry and material detail only; they must not change the final product's scale or position.
 
 Keep **Match Wallpaper source aspect** enabled to make a portrait reference produce a portrait output. The plug-in captures the complete Rhino view at a sufficient intermediate resolution, crops the matching camera sub-frustum, and applies that same portrait canvas to the reference, placement, rendered view, geometry controls, and masks. It does not stretch or rotate the photograph.
 
@@ -100,7 +100,7 @@ For strict compositing, use `inpaint_mask.png` with a workflow that composites g
 | `basecolor.png` | Flat material base colors without lighting |
 | `reference.png` | Full-frame Wallpaper reference |
 | `placement.png` | Product placement over the reference frame |
-| `scale_lock.png` | Exact full-frame silhouette, box, and center annotation |
+| `scale_lock.png` | Technical full-frame scale/position annotation; never final appearance |
 | `product_mask.png` | Exact product silhouette in the full frame |
 | `inpaint_mask.png` | Smooth allowed edit neighborhood |
 | `tryon.json` | Placement bounds, camera data, roles, and constraints |

@@ -78,7 +78,7 @@
 4. 开启 Wallpaper 产品佩戴模式，填写佩戴关系要求。
 5. 导出并更新到 ComfyUI。
 
-全画幅 `reference` 和 `placement` 决定最终构图、位置与尺度。`scale_lock.png` 在完整画幅中标记产品的精确轮廓、外接框和中心。放大的 `*_detail` 图片只提供造型与材质细节，不能改变最终产品的大小和位置。
+全画幅 `reference` 和 `placement` 决定最终构图、位置与尺度。`scale_lock.png` 在完整画幅中标记产品的精确轮廓、外接框和中心；其中紫色轮廓、矩形框和十字仅是不可见的测量信息，绝不能出现在最终成图中。自动提示词会在图片职责说明的开头和结尾重复这项清理要求。放大的 `*_detail` 图片只提供造型与材质细节，不能改变最终产品的大小和位置。
 
 保持“按 Wallpaper 原图比例输出”开启时，Portrait 参考图会直接生成竖幅结果。插件会先以足够的中间分辨率捕获完整 Rhino 视口，再裁出对应的相机子视锥，并把同一竖幅画布用于 reference、placement、rendered、全部几何控制图及蒙版；不会拉伸或旋转照片。
 
@@ -100,7 +100,7 @@
 | `basecolor.png` | 不含灯光的平面材质底色 |
 | `reference.png` | 完整 Wallpaper 参考底图 |
 | `placement.png` | 产品在参考图上的全画幅位置 |
-| `scale_lock.png` | 全画幅精确轮廓、边界框和中心标记 |
+| `scale_lock.png` | 仅用于全画幅尺度与位置测量，不作为最终外观 |
 | `product_mask.png` | 产品在完整画幅中的精确轮廓 |
 | `inpaint_mask.png` | 平滑的允许编辑邻域 |
 | `tryon.json` | 位置边界、相机、图片职责和约束信息 |

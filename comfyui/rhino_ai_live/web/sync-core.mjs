@@ -30,7 +30,7 @@ const ROLES = {
   shape_lock:"PRIMARY geometry reference; preserve the exact object count, silhouette, openings, gaps, overlaps, part boundaries, proportions and camera",
   rendered:"secondary surface-volume and curvature reference; do not copy its temporary white material, lighting or background",
   placement:"ABSOLUTE FULL-FRAME authority for final product position, pixel size, rotation and silhouette bounds. Copy the product at exactly the scale and location shown in this complete canvas; do not enlarge, shrink or move it based on any detail image",
-  scale_lock:"FULL-FRAME PIXEL SCALE stencil. The magenta silhouette, bounding rectangle and center crosshair encode the exact final product extrema and center on the complete canvas. The final product must touch the same left/right/top/bottom bounds without exceeding them. Use this only for scale and position; never render the magenta color, rectangle or crosshair",
+  scale_lock:"TECHNICAL MEASUREMENT INPUT ONLY, never an appearance reference. Its magenta silhouette, bounding rectangle and center crosshair encode only the exact final product extrema and center on the complete canvas. Treat every magenta pixel and every thin box/crosshair line as invisible metadata. The final product must touch the same left/right/top/bottom bounds without exceeding them, but the output must contain none of these marks. Reconstruct clean photograph pixels behind the marks from reference and placement",
   depth:"front-to-back order and relative spatial-depth reference",
   depth_inverse:"confirmation of the same depth relationships only",
   edges:"visible crease, hole and internal part-boundary reference",
@@ -44,6 +44,7 @@ const ROLES = {
 };
 export function imageGuide(data, channels=channelsFor(data)) {
   const lines=channels.map((key,index)=>`Image ${index+1} (${key}): ${ROLES[key]||"additional visual reference; use only for the information visibly encoded in this image"}.`);
+  if(channels.includes("scale_lock"))lines.unshift("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual product.");
   const materials=String(data.prompts?.color_materials||"").trim();
   const userInstruction=String(data.prompts?.user_prompt||"").trim();
   const placementConstraint=String(data.prompts?.placement_constraint||"").trim();
@@ -52,6 +53,7 @@ export function imageGuide(data, channels=channelsFor(data)) {
   if(placementConstraint)lines.push(placementConstraint);
   if(materials)lines.push("Material mapping for the material_id image:\n"+materials);
   if(userInstruction)lines.push("Rhino user instruction — follow this requested edit exactly:\n"+userInstruction);
+  if(channels.includes("scale_lock"))lines.push("FINAL VALIDATION BEFORE OUTPUT: inspect the completed image and remove every technical overlay originating from scale_lock. The finished photograph may contain the real product only, with zero bounding box, crosshair, guide line, measurement mark or colored annotation.");
   return ROLE_START+"\n"+lines.join("\n")+"\n"+ROLE_END;
 }
 
