@@ -1,0 +1,619 @@
+{
+  "id": "d2a78457-e57e-448b-a5dc-b1c4edbf74a0",
+  "revision": 0,
+  "last_node_id": 43,
+  "last_link_id": 63,
+  "nodes": [
+    {
+      "id": 35,
+      "type": "GeminiImage2Node",
+      "pos": [
+        770,
+        160
+      ],
+      "size": [
+        410,
+        470
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 56
+        },
+        {
+          "name": "files",
+          "shape": 7,
+          "type": "GEMINI_INPUT_FILES",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            52
+          ]
+        },
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GeminiImage2Node",
+        "cnr_id": "comfy-core",
+        "ver": "0.14.1"
+      },
+      "widgets_values": [
+        "#E63946 = 白色的上釉的陶瓷\n#2A9D8F = 烧白的纯银",
+        "gemini-3-pro-image-preview",
+        39494503692700,
+        "randomize",
+        "1:1",
+        "1K",
+        "IMAGE",
+        "You are an expert image-generation engine. You must ALWAYS produce an image.\nInterpret all user input—regardless of format, intent, or abstraction—as literal visual directives for image composition.\nIf a prompt is conversational or lacks specific visual details, you must creatively invent a concrete visual scenario that depicts the concept.\nPrioritize generating the visual representation above any text, formatting, or conversational requests."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 36,
+      "type": "BatchImagesNode",
+      "pos": [
+        440,
+        200
+      ],
+      "size": [
+        225,
+        120
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "image0",
+          "name": "images.image0",
+          "type": "IMAGE",
+          "link": 57
+        },
+        {
+          "label": "image1",
+          "name": "images.image1",
+          "type": "IMAGE",
+          "link": 58
+        },
+        {
+          "label": "image2",
+          "name": "images.image2",
+          "type": "IMAGE",
+          "link": 59
+        },
+        {
+          "label": "image3",
+          "name": "images.image3",
+          "type": "IMAGE",
+          "link": 60
+        },
+        {
+          "label": "image4",
+          "name": "images.image4",
+          "type": "IMAGE",
+          "link": 61
+        },
+        {
+          "label": "image5",
+          "name": "images.image5",
+          "type": "IMAGE",
+          "link": 62
+        },
+        {
+          "label": "image6",
+          "name": "images.image6",
+          "type": "IMAGE",
+          "link": 63
+        },
+        {
+          "label": "image7",
+          "name": "images.image7",
+          "type": "IMAGE",
+          "shape": 7,
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            56
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BatchImagesNode",
+        "cnr_id": "comfy-core",
+        "ver": "0.14.1",
+        "rhino_ai_live": true,
+        "rhino_ai_channels": [
+          "depth",
+          "depth_inverse",
+          "edges",
+          "silhouette",
+          "normal",
+          "mask",
+          "material_id"
+        ]
+      },
+      "widgets_values": [],
+      "title": "Batch Images · Rhino 自动更新"
+    },
+    {
+      "id": 30,
+      "type": "SaveImage",
+      "pos": [
+        1250,
+        160
+      ],
+      "size": [
+        390,
+        440
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 52
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.56",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.1",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "RhinoAI/manual_render"
+      ]
+    },
+    {
+      "id": 37,
+      "type": "LoadImage",
+      "pos": [
+        20,
+        40
+      ],
+      "size": [
+        300,
+        300
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            57
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.52",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.1",
+          "input_ue_unconnectable": {}
+        },
+        "rhino_ai_batch": "36",
+        "rhino_ai_channel": "depth"
+      },
+      "widgets_values": [
+        "rhino_ai/20260919_224851_410_a9c5cb/depth.png",
+        "image"
+      ],
+      "title": "RHINO:depth"
+    },
+    {
+      "id": 38,
+      "type": "LoadImage",
+      "pos": [
+        20,
+        380
+      ],
+      "size": [
+        300,
+        300
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            58
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.52",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.1",
+          "input_ue_unconnectable": {}
+        },
+        "rhino_ai_batch": "36",
+        "rhino_ai_channel": "depth_inverse"
+      },
+      "widgets_values": [
+        "rhino_ai/20260919_224851_410_a9c5cb/depth_inverse.png",
+        "image"
+      ],
+      "title": "RHINO:depth_inverse"
+    },
+    {
+      "id": 39,
+      "type": "LoadImage",
+      "pos": [
+        20,
+        720
+      ],
+      "size": [
+        300,
+        300
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            59
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.52",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.1",
+          "input_ue_unconnectable": {}
+        },
+        "rhino_ai_batch": "36",
+        "rhino_ai_channel": "edges"
+      },
+      "widgets_values": [
+        "rhino_ai/20260919_224851_410_a9c5cb/edges.png",
+        "image"
+      ],
+      "title": "RHINO:edges"
+    },
+    {
+      "id": 40,
+      "type": "LoadImage",
+      "pos": [
+        20,
+        1060
+      ],
+      "size": [
+        300,
+        300
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            60
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.52",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.1",
+          "input_ue_unconnectable": {}
+        },
+        "rhino_ai_batch": "36",
+        "rhino_ai_channel": "silhouette"
+      },
+      "widgets_values": [
+        "rhino_ai/20260919_224851_410_a9c5cb/silhouette.png",
+        "image"
+      ],
+      "title": "RHINO:silhouette"
+    },
+    {
+      "id": 41,
+      "type": "LoadImage",
+      "pos": [
+        20,
+        1400
+      ],
+      "size": [
+        300,
+        300
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            61
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.52",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.1",
+          "input_ue_unconnectable": {}
+        },
+        "rhino_ai_batch": "36",
+        "rhino_ai_channel": "normal"
+      },
+      "widgets_values": [
+        "rhino_ai/20260919_224851_410_a9c5cb/normal.png",
+        "image"
+      ],
+      "title": "RHINO:normal"
+    },
+    {
+      "id": 42,
+      "type": "LoadImage",
+      "pos": [
+        20,
+        1740
+      ],
+      "size": [
+        300,
+        300
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            62
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.52",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.1",
+          "input_ue_unconnectable": {}
+        },
+        "rhino_ai_batch": "36",
+        "rhino_ai_channel": "mask"
+      },
+      "widgets_values": [
+        "rhino_ai/20260919_224851_410_a9c5cb/mask.png",
+        "image"
+      ],
+      "title": "RHINO:mask"
+    },
+    {
+      "id": 43,
+      "type": "LoadImage",
+      "pos": [
+        20,
+        2080
+      ],
+      "size": [
+        300,
+        300
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            63
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.52",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.1",
+          "input_ue_unconnectable": {}
+        },
+        "rhino_ai_batch": "36",
+        "rhino_ai_channel": "material_id"
+      },
+      "widgets_values": [
+        "rhino_ai/20260919_224851_410_a9c5cb/material_id.png",
+        "image"
+      ],
+      "title": "RHINO:material_id"
+    }
+  ],
+  "links": [
+    [
+      52,
+      35,
+      0,
+      30,
+      0,
+      "IMAGE"
+    ],
+    [
+      56,
+      36,
+      0,
+      35,
+      0,
+      "IMAGE"
+    ],
+    [
+      57,
+      37,
+      0,
+      36,
+      0,
+      "IMAGE"
+    ],
+    [
+      58,
+      38,
+      0,
+      36,
+      1,
+      "IMAGE"
+    ],
+    [
+      59,
+      39,
+      0,
+      36,
+      2,
+      "IMAGE"
+    ],
+    [
+      60,
+      40,
+      0,
+      36,
+      3,
+      "IMAGE"
+    ],
+    [
+      61,
+      41,
+      0,
+      36,
+      4,
+      "IMAGE"
+    ],
+    [
+      62,
+      42,
+      0,
+      36,
+      5,
+      "IMAGE"
+    ],
+    [
+      63,
+      43,
+      0,
+      36,
+      6,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7,
+      "offset": [
+        40,
+        40
+      ]
+    },
+    "frontendVersion": "1.42.15",
+    "workflowRendererVersion": "LG",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true,
+    "ue_links": [],
+    "links_added_by_ue": []
+  },
+  "version": 0.4
+}

@@ -1,0 +1,10 @@
+exports/
+test-output/
+dist/*
+!dist/RhinoAI.rhp
+*.pdb
+.vs/
+bin/
+obj/
+*.user
+*.suo

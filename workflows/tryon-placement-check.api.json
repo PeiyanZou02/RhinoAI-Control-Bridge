@@ -1,0 +1,8 @@
+{
+  "1":{"class_type":"LoadImage","inputs":{"image":"{{reference}}"},"_meta":{"title":"RHINO:reference"}},
+  "2":{"class_type":"LoadImage","inputs":{"image":"{{placement}}"},"_meta":{"title":"RHINO:placement"}},
+  "3":{"class_type":"LoadImage","inputs":{"image":"{{inpaint_mask}}"},"_meta":{"title":"RHINO:inpaint_mask"}},
+  "4":{"class_type":"ImageToMask","inputs":{"image":["3",0],"channel":"red"}},
+  "5":{"class_type":"ImageCompositeMasked","inputs":{"destination":["1",0],"source":["2",0],"x":0,"y":0,"resize_source":false,"mask":["4",0]}},
+  "6":{"class_type":"PreviewImage","inputs":{"images":["5",0]}}
+}
