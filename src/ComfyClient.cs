@@ -70,7 +70,8 @@ namespace RhinoAI
                 return string.IsNullOrEmpty(sub)?name:sub.TrimEnd('/')+"/"+name;
             }
         }
-        public static JObject Bind(JObject graph,Dictionary<string,string> images,ExportResult export)
+        public static JObject Bind(JObject graph,Dictionary<string,string> images,ExportResult export){return Bind(graph,images,export,"","");}
+        public static JObject Bind(JObject graph,Dictionary<string,string> images,ExportResult export,string positive,string full)
         {
             if(graph["nodes"]!=null)throw new InvalidOperationException("This is a UI-format workflow. Export it from ComfyUI in API format.");
             if(graph["prompt"] is JObject)graph=(JObject)graph["prompt"];
@@ -87,7 +88,7 @@ namespace RhinoAI
                 {
                     if(value.Type!=JTokenType.String)continue;string text=(string)value;
                     foreach(var image in images)text=text.Replace("{{"+image.Key+"}}",image.Value);
-                    text=text.Replace("{{color_materials}}",export.Prompt??"").Replace("{{material_prompt}}",export.Prompt??"").Replace("{{positive_prompt}}","").Replace("{{wear_prompt}}","");
+                    text=text.Replace("{{color_materials}}",export.Prompt??"").Replace("{{material_prompt}}",export.Prompt??"").Replace("{{positive_prompt}}",positive??"").Replace("{{full_prompt}}",full??"").Replace("{{wear_prompt}}","");
                     if(text.Contains("{{"))throw new InvalidOperationException("The workflow has an unmatched placeholder: "+text);
                     value.Value=text;
                 }
@@ -141,6 +142,42 @@ namespace RhinoAI
             File.WriteAllText(Path.Combine(export.Directory,"comfy_sync.json"),manifest.ToString(),Encoding.UTF8);
             return "Images and prompt data uploaded"+(string.IsNullOrWhiteSpace(config.TargetWorkflow)?"":", target "+config.TargetWorkflow.Trim())+".";
         }
+        // The one place that runs a workflow: batch rendering with ComfyUI chosen as the engine. Send never does.
+        public async Task<List<AiImage>> Generate(ExportResult export,Config config,System.Threading.CancellationToken token)
+        {
+            if(string.IsNullOrWhiteSpace(config.Workflow))throw new InvalidOperationException("The ComfyUI engine needs an API workflow. Choose one on the Export settings page.");
+            await Check();var template=JObject.Parse(File.ReadAllText(config.Workflow,Encoding.UTF8));var selected=SelectForBatch(export.Files,config);
+            string positive=(config.AiPrompt??"").Trim(),full=PromptGuide.Build(selected.Keys.ToList(),export,config);
+            Bind(template,selected.ToDictionary(k=>k.Key,k=>Path.GetFileName(k.Value)),export,positive,full);
+            var uploaded=new Dictionary<string,string>();string folder="rhino_ai/"+Path.GetFileName(export.Directory);
+            foreach(var file in selected){token.ThrowIfCancellationRequested();uploaded[file.Key]=await Upload(file.Value,folder);}
+            var graph=Bind(template,uploaded,export,positive,full);
+            File.WriteAllText(Path.Combine(export.Directory,"comfy_job.json"),graph.ToString(),Encoding.UTF8);
+            var queued=await Json(await client.PostAsync("prompt",new StringContent(new JObject{["prompt"]=graph,["client_id"]="rhino2comfy"}.ToString(),Encoding.UTF8,"application/json"),token));
+            string id=(string)queued["prompt_id"];if(string.IsNullOrEmpty(id))throw new InvalidOperationException("ComfyUI did not queue the workflow: "+queued.ToString(Formatting.None));
+            var deadline=DateTime.UtcNow.AddMinutes(30);JObject entry=null;
+            while(entry==null)
+            {
+                if(DateTime.UtcNow>deadline)throw new TimeoutException("ComfyUI did not finish within 30 minutes.");
+                await Task.Delay(PollMilliseconds,token);
+                entry=(await Json(await client.GetAsync("history/"+id,token)))[id] as JObject;
+                if(entry!=null&&(string)entry.SelectToken("status.status_str")!="error"&&entry.SelectToken("status.completed")!=null&&!(bool)entry.SelectToken("status.completed"))entry=null;
+            }
+            if((string)entry.SelectToken("status.status_str")=="error")
+            {
+                var failure=entry.SelectTokens("status.messages[*]").OfType<JArray>().FirstOrDefault(m=>(string)m[0]=="execution_error");
+                throw new InvalidOperationException("ComfyUI workflow failed: "+(failure==null?"see the ComfyUI console":(string)failure[1]["node_type"]+" · "+(string)failure[1]["exception_message"]));
+            }
+            var found=entry.SelectTokens("outputs.*.images[*]").OfType<JObject>().ToList();
+            // Saved outputs win over temporary previews.
+            if(found.Any(x=>(string)x["type"]=="output"))found=found.Where(x=>(string)x["type"]=="output").ToList();
+            var results=new List<AiImage>();
+            foreach(var image in found)using(var response=await client.GetAsync("view?filename="+Uri.EscapeDataString((string)image["filename"]??"")+"&subfolder="+Uri.EscapeDataString((string)image["subfolder"]??"")+"&type="+Uri.EscapeDataString((string)image["type"]??"output"),token))
+            {if(!response.IsSuccessStatusCode)throw new InvalidOperationException("ComfyUI HTTP "+(int)response.StatusCode+" while downloading "+(string)image["filename"]);results.Add(new AiImage{Bytes=await response.Content.ReadAsByteArrayAsync()});}
+            if(results.Count==0)throw new InvalidOperationException("The ComfyUI workflow finished without an image output. Add a Save Image node.");
+            return results;
+        }
+        public int PollMilliseconds=1500;
         public static Dictionary<string,string> SelectForBatch(Dictionary<string,string> files,Config config)
         {
             string[] scene={"shape_lock","rendered","depth","depth_inverse","edges","silhouette","normal","mask","material_id"};

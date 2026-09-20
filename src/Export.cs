@@ -39,6 +39,13 @@ namespace RhinoAI
         public int LongEdge=1024;
         public string Style="Photorealistic visualization, physically plausible materials, soft natural lighting, accurate scale, balanced exposure, fine surface detail. Preserve the supplied design.";
         public List<LayerRule> Layers=new List<LayerRule>();
+        // AI render page. Lists start null because Json.NET appends saved items to a non-empty default.
+        public string AiEngine="google";
+        public string AiOutput=Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),"RhinoAI Renders");
+        public string AiPrompt="Photorealistic visualization, physically plausible materials, soft natural lighting, accurate scale, balanced exposure, fine surface detail. Preserve the supplied design.";
+        public List<string> AiChannels,AiViews;
+        public Dictionary<string,ProviderSettings> AiProviders=new Dictionary<string,ProviderSettings>();
+        public ProviderSettings Provider(string id){ProviderSettings found;if(!AiProviders.TryGetValue(id,out found)){found=new ProviderSettings();AiProviders[id]=found;}return found;}
         public static string Root {get{var location=typeof(Config).Assembly.Location;return !string.IsNullOrEmpty(location)?Path.GetDirectoryName(location):(System.Environment.GetEnvironmentVariable("RHINO_AI_HOME")??AppDomain.CurrentDomain.BaseDirectory);}}
         public static string PathName {get{return Path.Combine(Root,"settings.json");}}
         public static Config Load(){return File.Exists(PathName)?JsonConvert.DeserializeObject<Config>(File.ReadAllText(PathName,Encoding.UTF8)):new Config();}

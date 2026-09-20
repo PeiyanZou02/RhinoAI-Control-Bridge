@@ -4,7 +4,7 @@
 
 Rhino to Comfy is a local Rhino 8 plug-in for exporting the active CAD view as a compact set of AI image-generation controls and synchronizing them with a selected **Batch Images** node in ComfyUI. It is designed for architecture, product and object visualization, background photo blending, and workflows that need the generated image to follow Rhino geometry, material regions, camera perspective, and placement.
 
-The bridge updates images and prompt metadata only. It never presses Run, queues a prompt, or sends a generation request. Generation remains under the user's control in ComfyUI.
+Synchronization updates images and prompt metadata only. It never presses Run, queues a prompt, or sends a generation request. Generation happens only when you start it: in ComfyUI, or with **Render ticked views** on the **AI render** page, which renders Rhino named views directly through a vendor API without ComfyUI.
 
 ## Features
 
@@ -59,11 +59,12 @@ Restart ComfyUI after the first installation. When updating only the frontend fi
 
 ## The panel
 
-Run `Rhino2Comfy` to open the panel. It has four pages and one action bar.
+Run `Rhino2Comfy` to open the panel. It has five pages and one action bar.
 
 | Page | What it holds |
 | --- | --- |
 | **Sync** | Target workflow, the live ComfyUI status line, selected-objects export and automatic upload |
+| **AI render** | Engine and API key, the named views to render, the control images to send, prompt and render folder |
 | **Layer materials** | One row per Rhino layer with its ID color and the target material you type |
 | **Background blend** | Blending Rhino objects into the viewport Wallpaper photograph |
 | **Export settings** | ComfyUI address, export folder, optional API workflow, output size and the fixed widescreen frame |
@@ -99,6 +100,31 @@ When a workflow already has several Batch Images nodes, select the intended one 
 Changing the model, camera, selection, or material mapping does not start generation. Click **Update to ComfyUI** again to publish a new input batch.
 
 Standard scene mode keeps the legacy nine-channel control stack. **Lock widescreen frame 1024 × 589** is enabled by default, so resizing Rhino, opening a side panel, or changing the plug-in window cannot turn the output square. The plug-in crops the same camera frustum consistently across every control image, preserving perspective. Wallpaper placement, reference-photo, scale-lock, detail-crop, and inpaint instructions are applied only when Wallpaper product mode is enabled.
+
+## AI render: named views without ComfyUI
+
+ComfyUI's image nodes are wrappers around vendor APIs. With your own API key, the **AI render** page calls the vendor directly and saves the result to a local folder.
+
+1. Save the cameras you need with Rhino's `NamedView` command.
+2. On the **AI render** page choose the **Engine**:
+
+| Engine | Request | Key environment variable |
+| --- | --- | --- |
+| Google Gemini (Nano Banana) | `models/<model>:generateContent` | `GEMINI_API_KEY` |
+| OpenAI (GPT Image) | `images/edits` | `OPENAI_API_KEY` |
+| Volcengine Doubao (Seedream) | `images/generations` | `ARK_API_KEY` |
+| ComfyUI | queues the **API workflow** from Export settings and downloads its saved images | none |
+
+3. Paste the API key, or leave the field empty to use the environment variable. Each engine keeps its own key, model and address. The model list is editable, so newer models can be typed in. Change the API address only for a proxy or a compatible gateway.
+4. Tick the named views. **(Current viewport)** renders the view as it is now. **Reload views** reads the list from Rhino again.
+5. Tick the control images to send, write the prompt and choose the **Render folder**.
+6. Click **Render ticked views**. Each view is restored in the active viewport, exported, sent with the prompt, image roles and layer material mapping, and saved as `<view name>_<time>.png`. Your original view is restored at the end. **Cancel** stops the batch and drops the request in progress. A view that fails is reported and the batch continues.
+
+The exact prompt sent for each view is kept as `ai_prompt.txt` in that view's export folder. Export options such as the longest edge, the locked widescreen frame, selected objects only and Background blend apply to every view. Background blend always sends its own reference, placement and mask images.
+
+For the ComfyUI engine, the API workflow can use `{{positive_prompt}}` for your prompt text and `{{full_prompt}}` for the prompt with image roles and material mapping, next to the existing `RHINO:<channel>` image loaders.
+
+Vendor APIs are billed by the vendor per generated image.
 
 ## Background blend
 
@@ -147,6 +173,8 @@ Material IDs follow the Rhino layer display colors exactly, on a black backgroun
 node .\tests\sync-core.test.mjs
 ```
 
+`AiTests` and `SyncTests` in the test assembly run against fake HTTP handlers, so they need neither Rhino, an API key nor a network connection.
+
 The build uses the Rhino 8 `RhinoCommon.dll` already installed on the machine. PowerShell 7 supplies its bundled Roslyn compiler; Windows PowerShell 5.1 falls back to the Roslyn copy shipped with Rhino 8, so PowerShell 7 is optional. The output is `dist/Rhino2Comfy.rhp`.
 
 The synchronization tests verify that the bridge uploads and publishes inputs without calling ComfyUI's prompt or queue endpoints.
@@ -164,8 +192,8 @@ dist/       Latest prebuilt Rhino plug-in
 
 ## Privacy and limitations
 
-- Images are sent only to the ComfyUI server address configured in the panel.
-- The plug-in does not read or transmit API keys.
+- Synchronization sends images only to the ComfyUI server address configured in the panel, and never any API key.
+- AI render sends the ticked control images and the prompt to the API address shown on that page, and only when you click **Render ticked views**. API keys are stored in the local `settings.json` encrypted with Windows DPAPI for your Windows account, travel only in the request header over HTTPS, and are never written to logs or export folders.
 - Exported images and local settings are ignored by Git.
 - Nano Banana and other reference-image models are generative systems. Scale Lock and structured image roles improve adherence but do not provide ControlNet-style mathematical pixel locking.
 - Transparent materials are treated as opaque by the geometry controls. Texture, AO, roughness, metalness, displacement, clipping planes, and unbaked Grasshopper previews are not exported as native render passes.

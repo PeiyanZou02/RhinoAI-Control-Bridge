@@ -27,7 +27,7 @@ public static class RhinoAIRoslynResolver {
     [void][Reflection.Assembly]::LoadFrom((Join-Path $rhino 'Microsoft.CodeAnalysis.CSharp.dll'))
 }
 $framework = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319'
-$refs = @('mscorlib.dll','System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Net.Http.dll') | ForEach-Object { Join-Path $framework $_ }
+$refs = @('mscorlib.dll','System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Net.Http.dll','System.Security.dll') | ForEach-Object { Join-Path $framework $_ }
 $refs += @((Join-Path $rhino 'RhinoCommon.dll'),(Join-Path $rhino 'Newtonsoft.Json.dll'))
 $metadata = [System.Collections.Generic.List[Microsoft.CodeAnalysis.MetadataReference]]::new()
 foreach ($ref in $refs) { $metadata.Add([Microsoft.CodeAnalysis.MetadataReference]::CreateFromFile($ref)) }
