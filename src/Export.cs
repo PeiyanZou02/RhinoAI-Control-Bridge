@@ -26,6 +26,8 @@ namespace RhinoAI
         public string Workflow="";
         public bool ProductMode=false,SelectedOnly=false;
         public bool MatchWallpaperAspect=true;
+        public bool LockSceneAspect=true;
+        public int SceneAspectWidth=1024,SceneAspectHeight=589;
         public bool DetailPriority=true;
         public bool AutoEditRegion=true;
         public bool AutoSync=false;
@@ -46,18 +48,10 @@ namespace RhinoAI
             {
                 var rule=Layers.FirstOrDefault(l=>l.Id==layer.Id.ToString());
                 if(rule==null){rule=MaterialRules.Guess(layer);Layers.Add(rule);}
-                rule.Index=layer.Index;rule.Name=layer.FullPath;
+                rule.Index=layer.Index;rule.Name=layer.FullPath;rule.Color=Raster.Hex(layer.Color.ToArgb()&0xffffff);
             }
             var ids=new HashSet<string>(doc.Layers.Where(l=>!l.IsDeleted).Select(l=>l.Id.ToString()));
             Layers=Layers.Where(l=>ids.Contains(l.Id)).ToList();
-            var used=new HashSet<int>();int next=1;
-            foreach(var rule in Layers)
-            {
-                int c;
-                if(!int.TryParse((rule.Color??"").TrimStart('#'),System.Globalization.NumberStyles.HexNumber,null,out c)||c==0||c>0xffffff||used.Contains(c))
-                {do{c=Raster.Palette(next++);}while(used.Contains(c));rule.Color=Raster.Hex(c);}
-                used.Add(c);
-            }
         }
     }
     public static class MaterialRules
@@ -124,6 +118,7 @@ namespace RhinoAI
             int longest=Math.Max(size.Width,size.Height),target=Math.Max(256,Math.Min(4096,config.LongEdge));
             int defaultW=Math.Max(1,(int)Math.Round(size.Width*(double)target/longest)),defaultH=Math.Max(1,(int)Math.Round(size.Height*(double)target/longest));
             var layout=new CanvasLayout{CaptureWidth=defaultW,CaptureHeight=defaultH,OutputWidth=defaultW,OutputHeight=defaultH,Crop=new Rectangle(0,0,defaultW,defaultH)};
+            if(!config.ProductMode&&config.LockSceneAspect)layout=WallpaperLayout(size.Width,size.Height,Math.Max(1,config.SceneAspectWidth),Math.Max(1,config.SceneAspectHeight),target);
             int wallpaperWidth=0,wallpaperHeight=0;
             if(config.ProductMode&&config.MatchWallpaperAspect)
             {
@@ -149,7 +144,7 @@ namespace RhinoAI
             config.Scan(doc);
             var captureCamera=new Camera{Width=layout.CaptureWidth,Height=layout.CaptureHeight,Left=l,Right=r,Bottom=b,Top=t,Near=n,Far=f,Perspective=vp.IsPerspectiveProjection};
             var s=new Snapshot{Camera=ProductExport.CropCamera(captureCamera,layout.Crop,w,h)};
-            s.View=new {name=vp.Name,camera=vp.CameraLocation,target=vp.CameraTarget,up=vp.CameraUp,units=doc.ModelUnitSystem.ToString(),viewportWidth=size.Width,viewportHeight=size.Height,captureWidth=layout.CaptureWidth,captureHeight=layout.CaptureHeight,outputWidth=w,outputHeight=h,wallpaperWidth=wallpaperWidth,wallpaperHeight=wallpaperHeight,wallpaperCropPixels=new[]{layout.Crop.Left,layout.Crop.Top,layout.Crop.Right,layout.Crop.Bottom},wallpaperAspectMatched=config.ProductMode&&config.MatchWallpaperAspect&&wallpaperWidth>0};
+            s.View=new {name=vp.Name,camera=vp.CameraLocation,target=vp.CameraTarget,up=vp.CameraUp,units=doc.ModelUnitSystem.ToString(),viewportWidth=size.Width,viewportHeight=size.Height,captureWidth=layout.CaptureWidth,captureHeight=layout.CaptureHeight,outputWidth=w,outputHeight=h,sceneAspectLocked=!config.ProductMode&&config.LockSceneAspect,wallpaperWidth=wallpaperWidth,wallpaperHeight=wallpaperHeight,wallpaperCropPixels=new[]{layout.Crop.Left,layout.Crop.Top,layout.Crop.Right,layout.Crop.Bottom},wallpaperAspectMatched=config.ProductMode&&config.MatchWallpaperAspect&&wallpaperWidth>0};
             foreach(var rule in config.Layers){s.LayerColors[rule.Index+1]=Convert.ToInt32(rule.Color.TrimStart('#'),16);s.LayerTargetMaterials[rule.Index+1]=rule.Material;}
             var transform=vp.GetTransform(CoordinateSystem.World,CoordinateSystem.Camera);
             var objects=doc.Objects.GetObjectList(new ObjectEnumeratorSettings{NormalObjects=true,LockedObjects=true,HiddenObjects=false,ReferenceObjects=true});
@@ -169,6 +164,7 @@ namespace RhinoAI
             s.Warnings.Add("控制图将透明表面视为不透明前表面；basecolor 是材质底色，不包含贴图、灯光或完整 PBR 通道。独立曲线、点、标注和 Grasshopper 未烘焙预览不参与控制图。");
             s.Warnings.Add("Material ID 严格按 Rhino 图层分区：同一图层同色，不同图层不同色；暂不识别单个 Brep 面或网格面的材质覆盖。");
             s.Warnings.Add("法线为相机空间：R=右，G=上，B=朝向相机。轮廓由遮挡/物体边界/深度和法线变化生成，不是 Rhino Make2D 或 Canny 算法。");
+            if(!config.ProductMode&&config.LockSceneAspect)s.Warnings.Add("普通场景已固定为旧版宽屏比例 "+config.SceneAspectWidth+" × "+config.SceneAspectHeight+"；窗口和侧边栏尺寸不会再改变输出画幅，全部控制图使用同一相机子视锥。");
             if(config.ProductMode)
             {
                 s.WallpaperPath=vp.WallpaperFilename;
@@ -237,7 +233,8 @@ namespace RhinoAI
             if(!materials.ContainsKey(key))materials[key]=materials.Count+1;
             int materialId=layerId;
             string targetMaterial;s.LayerTargetMaterials.TryGetValue(layerId,out targetMaterial);
-            s.Objects.Add(new {id=objectId,rhinoId=obj.Id,layerId=layerId,materialId=materialId,materialName=string.IsNullOrWhiteSpace(targetMaterial)?(mat==null?"Default":mat.Name):targetMaterial,objectColor=Raster.Hex(Raster.Palette(objectId)),materialColor=Raster.Hex(Raster.Palette(materialId))});
+            int materialColor;if(!s.LayerColors.TryGetValue(layerId,out materialColor))materialColor=Raster.Palette(materialId);
+            s.Objects.Add(new {id=objectId,rhinoId=obj.Id,layerId=layerId,materialId=materialId,materialName=string.IsNullOrWhiteSpace(targetMaterial)?(mat==null?"Default":mat.Name):targetMaterial,objectColor=Raster.Hex(Raster.Palette(objectId)),materialColor=Raster.Hex(materialColor)});
             foreach(var m in meshes)using(m)
             {
                 m.Transform(world);m.Normals.ComputeNormals();m.Transform(camera);m.Normals.ComputeNormals();
@@ -256,9 +253,13 @@ namespace RhinoAI
             string dir=Path.Combine(config.Output,DateTime.Now.ToString("yyyyMMdd_HHmmss_fff")+"_"+Guid.NewGuid().ToString("N").Substring(0,6));
             var raster=new Raster(snapshot.Camera);int total=snapshot.Triangles.Count;
             for(int i=0;i<total;i++){raster.Draw(snapshot.Triangles[i]);if(i%2000==0 && progress!=null)progress(i*70/total);}
+            var visible=new HashSet<int>(raster.Layers.Where(x=>x>0));
+            var visibleColors=snapshot.LayerColors.Where(x=>visible.Contains(x.Key)).ToList();
+            if(visibleColors.Any(x=>x.Value==0))throw new InvalidOperationException("Material ID 不能使用纯黑色图层：黑色保留给背景。请修改对应 Rhino 图层颜色。");
+            var duplicate=visibleColors.GroupBy(x=>x.Value).FirstOrDefault(g=>g.Count()>1);
+            if(duplicate!=null)throw new InvalidOperationException("Material ID 中有多个可见 Rhino 图层使用相同颜色 "+Raster.Hex(duplicate.Key)+"。请为这些图层设置不同颜色，或点击“一键分配高对比图层颜色”。");
             var files=raster.Save(dir,snapshot.LayerColors);
             if(snapshot.Rendered!=null&&snapshot.Rendered.Length>0){string rendered=Path.Combine(dir,"rendered.png");File.WriteAllBytes(rendered,snapshot.Rendered);files["rendered"]=rendered;}
-            var visible=new HashSet<int>(raster.Layers.Where(x=>x>0));
             var rules=config.Layers.Where(x=>visible.Contains(x.Index+1)).ToList();
             string prompt=MaterialRules.Prompt(rules,null);
             string wear=null,placementConstraint=null;

@@ -70,7 +70,7 @@ Restart ComfyUI after the first installation. When updating only the frontend fi
 
 Changing a product, camera, selection, or material mapping does not start generation. Click **Update to ComfyUI** again to publish a new input batch.
 
-Standard scene mode keeps the legacy nine-channel control stack and follows the active Rhino viewport aspect ratio. Wallpaper placement, reference-photo, scale-lock, detail-crop, and inpaint instructions are applied only when Wallpaper product mode is enabled.
+Standard scene mode keeps the legacy nine-channel control stack. **Lock standard scene to legacy widescreen (1024 × 589)** is enabled by default, so resizing Rhino, opening a side panel, or changing the plug-in window cannot turn the output square. The plug-in crops the same camera frustum consistently across every control image, preserving perspective. Wallpaper placement, reference-photo, scale-lock, detail-crop, and inpaint instructions are applied only when Wallpaper product mode is enabled.
 
 ## Wallpaper product placement
 
@@ -108,6 +108,8 @@ For strict compositing, use `inpaint_mask.png` with a workflow that composites g
 | `tryon.json` | Placement bounds, camera data, roles, and constraints |
 
 All raster controls from a single export share the same base camera and perspective. Portrait output and detail controls use cropped camera sub-frustums derived from the same view, without changing the camera location or lens.
+
+Material IDs follow the Rhino layer display colors exactly, on a black background. The same HEX values are written into the material mapping prompt. Use **Assign high-contrast layer colors** in the plug-in when adjacent parts are hard to distinguish. Visible layers must use unique, non-black colors so their regions remain unambiguous.
 
 ## Build and test
 

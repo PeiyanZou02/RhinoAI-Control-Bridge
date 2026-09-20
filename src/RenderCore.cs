@@ -108,7 +108,8 @@ namespace RhinoAI
                 maps["normal"][i]=hit?Rgb(Encode(NX[i]),Encode(NY[i]),Encode(NZ[i])):0;
                 maps["mask"][i]=hit?0xffffff:0;
                 maps["color_code"][i]=hit?layerColors[Layers[i]]:0;
-                maps["material_id"][i]=hit?Palette(Materials[i]):0;
+                int materialColor;
+                maps["material_id"][i]=hit?(layerColors.TryGetValue(Materials[i],out materialColor)?materialColor:Palette(Materials[i])):0;
                 maps["object_id"][i]=hit?Palette(Objects[i]):0;
                 maps["basecolor"][i]=hit?Colors[i]:0;
                 bool edge=false,sil=false;int x=i%w,y=i/w;
@@ -150,7 +151,9 @@ namespace RhinoAI
         static int Encode(float n){return Math.Max(0,Math.Min(255,(int)Math.Round((n+1)*127.5)));}
         public static int Palette(int id)
         {
-            int[] first={0,0xe63946,0x2a9d8f,0x4361ee,0xffbe0b,0x9b5de5,0xfb8500,0x00b4d8,0xf15bb5,0x8ac926,0xa86f32,0x7b8cde,0xf4a261};
+            // Saturated, widely separated colors remain readable on the black ID-map
+            // background, including on very thin jewelry parts.
+            int[] first={0,0xff1744,0x00e5ff,0xffea00,0x651fff,0x00e676,0xff6d00,0x2979ff,0xf500ff,0x76ff03,0xff4081,0x00bfa5,0xc6a0ff,0xffffff,0x8b4513};
             if(id<first.Length)return first[id];
             // Odd multiplication permutes the 24-bit integer space, so IDs remain unique.
             int c=(int)(((long)id*0x9e3779)&0xffffff);
