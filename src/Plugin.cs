@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Rhino;
@@ -13,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.25.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.26.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -47,13 +48,19 @@ namespace RhinoAI
     }
     public sealed class BridgeWindow : Form
     {
-        const string Follow="Follow the current ComfyUI window";
+        const string Follow="Follow the current ComfyUI window",CurrentView="(Current viewport)";
         readonly RhinoDoc doc;
         readonly Config config;
         readonly TextBox server=new TextBox(),output=new TextBox(),workflow=new TextBox(),wear=new TextBox(),occlusion=new TextBox();
         readonly ComboBox target=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly NumericUpDown edge=new NumericUpDown(),padding=new NumericUpDown();
         readonly CheckBox selected=new CheckBox(),tryon=new CheckBox(),autoSync=new CheckBox(),detailPriority=new CheckBox(),adaptiveMask=new CheckBox(),wallpaperAspect=new CheckBox(),sceneAspect=new CheckBox();
+        readonly ComboBox engine=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},model=new ComboBox();
+        readonly TextBox apiKey=new TextBox{UseSystemPasswordChar=true},apiUrl=new TextBox(),aiPrompt=new TextBox(),aiOutput=new TextBox();
+        readonly CheckedListBox views=new CheckedListBox(),channels=new CheckedListBox();
+        FlatButton renderButton,cancelButton;
+        CancellationTokenSource cancel;
+        AiProvider shown;
         readonly AutoSyncWatcher watcher;
         readonly DataGridView layers=new DataGridView();
         readonly TextBox log=new TextBox();
@@ -114,8 +121,30 @@ namespace RhinoAI
             Row(settings,"Export folder",Browse(output,false,true),null);Row(settings,"API workflow (optional)",Browse(workflow,true,false),"Only used to write a bound API JSON file. Nothing is queued.");
             Row(settings,"Longest edge (px)",new Field(edge,34),null);Add(settings,sceneAspect);
 
+            var ai=Stack();
+            foreach(var provider in AiProviders.All)engine.Items.Add(provider);
+            Row(ai,"Engine",new Field(engine,34),"The tool that renders the ticked views. A vendor API renders directly, without ComfyUI. The ComfyUI engine queues the API workflow from Export settings.");
+            Row(ai,"API key",new Field(apiKey,34),"Saved encrypted for your Windows account and sent only to the API address below. Leave empty to use the vendor's environment variable, such as GEMINI_API_KEY.");
+            Row(ai,"Model",new Field(model,34),"Pick a suggestion or type any image model the vendor offers.");
+            Row(ai,"API address",new Field(apiUrl,34),"Change only when you use a proxy or a compatible gateway.");
+            foreach(var list in new[]{views,channels}){list.BorderStyle=BorderStyle.None;list.CheckOnClick=true;list.IntegralHeight=false;}
+            channels.MultiColumn=true;channels.ColumnWidth=Theme.S(150);
+            Row(ai,"Named views to render",new Field(views,132),"Every ticked view is restored in the active viewport, exported and rendered in turn. Your current view comes back afterwards.");
+            var viewActions=new FlowLayoutPanel{AutoSize=true,Margin=new Padding(0,0,0,Theme.S(8))};
+            viewActions.Controls.Add(Button("Reload views",delegate{FillViews(TickedViews());}));viewActions.Controls.Add(Button("All",delegate{for(int i=1;i<views.Items.Count;i++)views.SetItemChecked(i,true);},ButtonKind.Ghost));viewActions.Controls.Add(Button("None",delegate{for(int i=0;i<views.Items.Count;i++)views.SetItemChecked(i,false);},ButtonKind.Ghost));Add(ai,viewActions);
+            Row(ai,"Control images to send",new Field(channels,72),"Fewer images are faster and cheaper. Background blend always sends its own reference, placement and mask set.");
+            aiPrompt.Multiline=true;aiPrompt.ScrollBars=ScrollBars.Vertical;aiPrompt.Text=config.AiPrompt;aiOutput.Text=config.AiOutput;
+            Row(ai,"Prompt",new Field(aiPrompt,96),"The look you want. Image roles and the layer material mapping are added automatically.");
+            Row(ai,"Render folder",Browse(aiOutput,false,true),"Finished images are saved here, named after their view.");
+            var aiActions=new FlowLayoutPanel{AutoSize=true,Margin=new Padding(0,Theme.S(4),0,Theme.S(8))};
+            renderButton=Button("Render ticked views",async delegate{await RenderViews();},ButtonKind.Primary);cancelButton=Button("Cancel",delegate{if(cancel!=null)cancel.Cancel();});cancelButton.Enabled=false;
+            aiActions.Controls.Add(renderButton);aiActions.Controls.Add(cancelButton);aiActions.Controls.Add(Button("Render folder",delegate{if(Directory.Exists(aiOutput.Text))Open(aiOutput.Text);},ButtonKind.Ghost));Add(ai,aiActions);
+            foreach(var channel in PromptGuide.SceneChannels)channels.Items.Add(channel,(config.AiChannels==null||config.AiChannels.Count==0?PromptGuide.DefaultChannels:config.AiChannels.ToArray()).Contains(channel));
+            FillViews(config.AiViews??new List<string>{CurrentView});
+            engine.SelectedIndexChanged+=(s,e)=>ShowEngine();engine.SelectedItem=AiProviders.Find(config.AiEngine);
+
             var host=new Panel{Dock=DockStyle.Fill,Margin=Padding.Empty};
-            foreach(var page in new[]{Page("Sync",sync),Page("Layer materials",material),Page("Background blend",blend),Page("Export settings",settings)}){pages.Add(page);host.Controls.Add(page);}
+            foreach(var page in new[]{Page("Sync",sync),Page("AI render",ai),Page("Layer materials",material),Page("Background blend",blend),Page("Export settings",settings)}){pages.Add(page);host.Controls.Add(page);}
 
             actions.Dock=DockStyle.Fill;actions.Margin=Padding.Empty;actions.Padding=new Padding(Theme.S(24),Theme.S(10),0,0);actions.WrapContents=false;
             actions.Controls.Add(Button("Update to ComfyUI",async delegate{await Export(true,false);},ButtonKind.Primary));actions.Controls.Add(Button("Export only",async delegate{await Export(false,false);}));
@@ -130,7 +159,7 @@ namespace RhinoAI
             var side=new Panel{Dock=DockStyle.Left,Width=Theme.S(176),BackColor=Theme.Side};
             var menu=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,BackColor=Theme.Side,Padding=new Padding(Theme.S(10),Theme.S(14),Theme.S(10),Theme.S(8))};menu.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
             menu.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(46)));menu.Controls.Add(new Label{Text="Rhino to Comfy",Font=Theme.Title(),Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(Theme.S(8),0,0,Theme.S(6)),Margin=Padding.Empty},0,0);
-            string[] names={"Sync","Layer materials","Background blend","Export settings"};
+            string[] names={"Sync","AI render","Layer materials","Background blend","Export settings"};
             for(int i=0;i<names.Length;i++)
             {
                 int index=i;var item=new FlatButton{Text=names[i],Kind=ButtonKind.Nav,Dock=DockStyle.Fill,Margin=new Padding(0,Theme.S(1),0,Theme.S(1)),Font=Theme.Body()};item.Click+=(s,e)=>Go(index);
@@ -230,6 +259,86 @@ namespace RhinoAI
         {
             layers.EndEdit();foreach(DataGridViewRow row in layers.Rows){var l=(LayerRule)row.Tag;l.Material=Convert.ToString(row.Cells[2].Value).Trim();if(string.IsNullOrWhiteSpace(l.Material))throw new ArgumentException("Enter a target material for layer: "+l.Name);}
             config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.TargetWorkflow=SelectedTarget();config.LongEdge=(int)edge.Value;config.LockSceneAspect=sceneAspect.Checked;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.MatchWallpaperAspect=wallpaperAspect.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;
+            StoreEngine();config.AiEngine=shown.Id;config.AiPrompt=aiPrompt.Text;config.AiOutput=aiOutput.Text.Trim();config.AiChannels=channels.CheckedItems.Cast<string>().ToList();config.AiViews=TickedViews();
+        }
+        List<string> TickedViews(){return views.CheckedItems.Cast<string>().ToList();}
+        void FillViews(List<string> ticked)
+        {
+            views.BeginUpdate();views.Items.Clear();views.Items.Add(CurrentView,ticked.Contains(CurrentView));
+            if(doc!=null)for(int i=0;i<doc.NamedViews.Count;i++){string name=doc.NamedViews[i].Name;if(!string.IsNullOrEmpty(name)&&!views.Items.Contains(name))views.Items.Add(name,ticked.Contains(name));}
+            views.EndUpdate();
+        }
+        // Each vendor keeps its own key, model and address, so switching engines loses nothing.
+        void StoreEngine()
+        {
+            if(shown==null||shown.Id==AiProviders.Comfy)return;
+            var settings=config.Provider(shown.Id);string key=apiKey.Text.Trim();
+            if(key!=Secret.Reveal(settings.Key))settings.Key=Secret.Protect(key);
+            settings.Model=model.Text.Trim();settings.BaseUrl=apiUrl.Text.Trim()==shown.BaseUrl?"":apiUrl.Text.Trim();
+        }
+        void ShowEngine()
+        {
+            StoreEngine();shown=(AiProvider)engine.SelectedItem;bool api=shown.Id!=AiProviders.Comfy;var settings=api?config.Provider(shown.Id):new ProviderSettings();
+            apiKey.Enabled=model.Enabled=apiUrl.Enabled=api;apiKey.Text=Secret.Reveal(settings.Key);apiUrl.Text=settings.BaseUrl==""?shown.BaseUrl:settings.BaseUrl;
+            model.Items.Clear();model.Items.AddRange(shown.Models);model.Text=settings.Model==""?shown.Models.FirstOrDefault()??"":settings.Model;
+        }
+        static string FileName(string text){var invalid=Path.GetInvalidFileNameChars();string clean=new string((text??"").Select(c=>invalid.Contains(c)?'_':c).ToArray()).Trim().TrimEnd('.');return clean==""?"view":clean;}
+        async Task RenderViews()
+        {
+            actions.Enabled=false;renderButton.Enabled=false;cancelButton.Enabled=true;cancel=new CancellationTokenSource();var token=cancel.Token;
+            Rhino.Display.RhinoView view=null;Rhino.DocObjects.ViewportInfo saved=null;string savedName=null;int done=0,failed=0;
+            try
+            {
+                if(RhinoDoc.ActiveDoc==null||RhinoDoc.ActiveDoc.RuntimeSerialNumber!=doc.RuntimeSerialNumber)throw new InvalidOperationException("The active document changed. Close this panel and run Rhino2Comfy again.");
+                Read();config.Save();var names=TickedViews();if(names.Count==0)throw new InvalidOperationException("Tick at least one view to render.");
+                bool api=shown.Id!=AiProviders.Comfy;var settings=api?config.Provider(shown.Id):null;string key=api?apiKey.Text.Trim():"";
+                if(api&&key=="")key=Environment.GetEnvironmentVariable(shown.KeyVariable)??"";
+                if(api&&key=="")throw new InvalidOperationException("Enter the "+shown.Name+" API key, or set the "+shown.KeyVariable+" environment variable.");
+                view=doc.Views.ActiveView;if(view==null||view is Rhino.Display.RhinoPageView)throw new InvalidOperationException("Activate a model viewport first.");
+                var vp=view.ActiveViewport;saved=new Rhino.DocObjects.ViewportInfo(vp);savedName=vp.Name;Directory.CreateDirectory(config.AiOutput);
+                Log("Rendering "+names.Count+" view(s) with "+shown.Name+"…");
+                for(int i=0;i<names.Count;i++)
+                {
+                    token.ThrowIfCancellationRequested();string name=names[i];int step=i;
+                    try
+                    {
+                        if(name!=CurrentView)
+                        {
+                            int index=doc.NamedViews.FindByName(name);if(index<0)throw new InvalidOperationException("the named view no longer exists");
+                            if(!doc.NamedViews.Restore(index,vp))throw new InvalidOperationException("Rhino could not restore the named view");view.Redraw();
+                        }
+                        string label=name==CurrentView?savedName:name;Log("["+(i+1)+"/"+names.Count+"] "+label+": exporting control images…");
+                        var snapshot=Exporter.Capture(doc,config);
+                        last=await Task.Run(()=>Exporter.Render(snapshot,config,p=>{if(!IsDisposed)BeginInvoke((Action)(()=>progress.Value=Math.Min(99,(step*100+p/2)/names.Count)));}));
+                        token.ThrowIfCancellationRequested();List<AiImage> images;
+                        if(api)
+                        {
+                            var notes=new List<string>();var inputs=PromptGuide.Select(last,config,shown.MaxImages,notes);foreach(var note in notes)Log(note);
+                            string prompt=PromptGuide.Build(inputs.Select(x=>x.Key).ToList(),last,config);File.WriteAllText(Path.Combine(last.Directory,"ai_prompt.txt"),prompt,System.Text.Encoding.UTF8);
+                            Log("["+(i+1)+"/"+names.Count+"] "+label+": sending "+inputs.Count+" images to "+shown.Name+"…");
+                            using(var client=new AiClient())images=await client.Generate(shown,settings,key,prompt,inputs,snapshot.Camera.Width,snapshot.Camera.Height,token);
+                        }
+                        else
+                        {
+                            Log("["+(i+1)+"/"+names.Count+"] "+label+": queued in ComfyUI…");
+                            using(var client=new ComfyClient(config.Server)){client.Timeout=TimeSpan.FromMinutes(5);images=await client.Generate(last,config,token);}
+                        }
+                        string stamp=DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                        for(int n=0;n<images.Count;n++){string path=Path.Combine(config.AiOutput,FileName(label)+"_"+stamp+(n==0?"":"_"+(n+1))+images[n].Extension);File.WriteAllBytes(path,images[n].Bytes);Log("Saved: "+path);}
+                        done++;
+                    }
+                    catch(OperationCanceledException){throw;}
+                    catch(Exception e){failed++;Log("["+(i+1)+"/"+names.Count+"] "+name+" not rendered: "+e.Message);}
+                }
+                Log("Finished: "+done+" rendered"+(failed>0?", "+failed+" failed":"")+". "+config.AiOutput);
+            }
+            catch(OperationCanceledException){Log("Cancelled after "+done+" view(s).");}
+            catch(Exception e){Log("Not completed: "+e.Message);}
+            finally
+            {
+                try{if(saved!=null&&view!=null&&view.Document!=null){view.ActiveViewport.SetViewProjection(saved,true);view.ActiveViewport.Name=savedName;view.Redraw();}}catch(Exception e){RhinoApp.WriteLine(e.Message);}
+                if(cancel!=null){cancel.Dispose();cancel=null;}progress.Value=0;cancelButton.Enabled=false;renderButton.Enabled=true;actions.Enabled=true;
+            }
         }
         void ApplyColors(){uint undo=doc.BeginUndoRecord("Rhino to Comfy layer color codes");try{foreach(var rule in config.Layers){var layer=doc.Layers.FindId(new Guid(rule.Id));if(layer!=null){layer.Color=ColorTranslator.FromHtml(rule.Color);}}}finally{doc.EndUndoRecord(undo);}doc.Views.Redraw();Log("ID colors applied to the layer display colors. Undo is supported.");}
         void AssignHighContrastColors()
