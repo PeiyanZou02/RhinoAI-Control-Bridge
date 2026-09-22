@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.35.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.36.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -54,10 +54,10 @@ namespace RhinoAI
         readonly TextBox server=new TextBox(),output=new TextBox(),workflow=new TextBox(),wear=new TextBox(),occlusion=new TextBox();
         readonly ComboBox target=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly NumericUpDown edge=new NumericUpDown(),padding=new NumericUpDown();
-        readonly CheckBox selected=new CheckBox(),tryon=new CheckBox(),autoSync=new CheckBox(),syncStyle=new CheckBox(),detailPriority=new CheckBox(),adaptiveMask=new CheckBox(),wallpaperAspect=new CheckBox(),sceneAspect=new CheckBox();
+        readonly CheckBox selected=new FlatCheck(),tryon=new FlatCheck(),autoSync=new FlatCheck(),syncStyle=new FlatCheck(),detailPriority=new FlatCheck(),adaptiveMask=new FlatCheck(),wallpaperAspect=new FlatCheck(),sceneAspect=new FlatCheck();
         readonly ComboBox engine=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},model=new ComboBox(),frameRatio=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},aspect=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},resolution=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly TextBox apiKey=new TextBox{UseSystemPasswordChar=true},apiUrl=new TextBox(),aiPrompt=new TextBox(),aiOutput=new TextBox();
-        readonly CheckedListBox views=new CheckedListBox(),channels=new CheckedListBox();
+        readonly CheckedListBox views=new CheckList(),channels=new CheckList();
         readonly ListBox references=new ListBox{BorderStyle=BorderStyle.None,IntegralHeight=false,SelectionMode=SelectionMode.MultiExtended,HorizontalScrollbar=true};
         FlatButton renderButton,cancelButton;
         CancellationTokenSource cancel;
@@ -79,9 +79,9 @@ namespace RhinoAI
         {
             doc=document;config=Config.Load();if(doc!=null)config.Scan(doc);
             Theme.Scale=DeviceDpi/96f;mono=Theme.Mono();
-            Text="Rhino to Comfy";ClientSize=new Size(Theme.S(920),Theme.S(640));MinimumSize=new Size(Theme.S(760),Theme.S(540));StartPosition=FormStartPosition.CenterScreen;
+            Text="Rhino to Comfy";ClientSize=new Size(Theme.S(1000),Theme.S(720));MinimumSize=new Size(Theme.S(820),Theme.S(600));StartPosition=FormStartPosition.CenterScreen;
             Font=Theme.Body();BackColor=Theme.Bg;ForeColor=Theme.Text;
-            progress=new ThinProgress{Dock=DockStyle.Fill,Margin=Padding.Empty};connection=new StatusDot{Dock=DockStyle.Fill,Font=Theme.Small(),Margin=Padding.Empty};connection.Set(Theme.Faint,"Not connected");
+            progress=new ThinProgress{Dock=DockStyle.Fill,Margin=Padding.Empty};connection=new StatusDot{Dock=DockStyle.Fill,Font=Theme.Body(),Margin=Padding.Empty};connection.Set(Theme.Faint,"Not connected");
 
             server.Text=config.Server;output.Text=config.Output;workflow.Text=config.Workflow;
             edge.Minimum=256;edge.Maximum=4096;edge.Increment=256;edge.Value=config.LongEdge;
@@ -96,13 +96,13 @@ namespace RhinoAI
             Check(adaptiveMask,"Expand the edit region automatically",config.AutoEditRegion,"Grows the editable area so existing content under the objects can be replaced. The pixel value below is the minimum.");
 
             var sync=Stack();
-            var targetRow=Pair(new Field(target,34),Button("Refresh",async delegate{await RefreshWorkflows(false);}));
+            var targetRow=Pair(new Field(target,32),Button("Refresh",async delegate{await RefreshWorkflows(false);}));
             Row(sync,"Target workflow",targetRow,"Update to ComfyUI switches ComfyUI to this file, then updates its Batch Images.");
-            targetStatus.AutoSize=true;targetStatus.ForeColor=Theme.Muted;targetStatus.Font=Theme.Small();targetStatus.Margin=new Padding(Theme.S(2),Theme.S(2),0,Theme.S(18));targetStatus.Text=" ";Add(sync,targetStatus);
+            targetStatus.AutoSize=true;targetStatus.ForeColor=Theme.Muted;targetStatus.Font=Theme.Small();targetStatus.Margin=new Padding(0,Theme.S(8),0,Theme.S(24));targetStatus.Text=" ";Add(sync,targetStatus);
             Add(sync,selected);Add(sync,autoSync);Add(sync,syncStyle);
 
             var material=new TableLayoutPanel{ColumnCount=1,RowCount=2};material.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-            var materialActions=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,Theme.S(10))};
+            var materialActions=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,Theme.S(16))};
             materialActions.Controls.Add(Tip(Button("Reload layers",delegate{Read();config.Scan(doc);FillLayers();}),"Reads layers and colors from Rhino again."));
             materialActions.Controls.Add(Tip(Button("Assign contrast colors",AssignHighContrastColors),"Gives every layer a distinct Material ID color. Undo is supported."));
             materialActions.Controls.Add(Tip(Button("Create layer materials",delegate{Read();ApplyMaterials();}),"Creates basic Rhino materials from the target materials in the table. Undo is supported."));
@@ -115,36 +115,36 @@ namespace RhinoAI
             var blend=Stack();
             wear.Multiline=true;wear.ScrollBars=ScrollBars.Vertical;wear.Text=config.WearInstructions;padding.Minimum=0;padding.Maximum=256;padding.Value=config.MaskPadding;occlusion.Text=config.OcclusionMask;
             Add(blend,tryon);Add(blend,wallpaperAspect);Add(blend,detailPriority);Add(blend,adaptiveMask);
-            Row(blend,"Blend instructions",new Field(wear,96),null);Row(blend,"Minimum expansion (px)",new Field(padding,34),null);
+            Row(blend,"Blend instructions",new Field(wear,96),null);Row(blend,"Minimum expansion (px)",new Field(padding,32),null);
             Row(blend,"Occlusion mask (optional)",Browse(occlusion,false,false),"Black and white image at export size. White areas of the photo stay untouched and in front.");
 
             var settings=Stack();
-            Row(settings,"ComfyUI address",Pair(new Field(server,34),Button("Test connection",async delegate{await RefreshWorkflows(false);})),null);
+            Row(settings,"ComfyUI address",Pair(new Field(server,32),Button("Test connection",async delegate{await RefreshWorkflows(false);})),null);
             Row(settings,"Export folder",Browse(output,false,true),null);Row(settings,"API workflow (optional)",Browse(workflow,true,false),"Only used to write a bound API JSON file. Nothing is queued.");
-            Row(settings,"Longest edge (px)",new Field(edge,34),null);Add(settings,sceneAspect);
+            Row(settings,"Longest edge (px)",new Field(edge,32),null);Add(settings,sceneAspect);
             frameRatio.Items.Add(FrameAsIs);frameRatio.Items.Add(FrameAuto);frameRatio.Items.AddRange(AiProviders.ModelRatios);
             frameRatio.SelectedItem=config.FrameRatio=="frame"||string.IsNullOrWhiteSpace(config.FrameRatio)?FrameAsIs:config.FrameRatio=="auto"?FrameAuto:frameRatio.Items.Contains(config.FrameRatio)?config.FrameRatio:FrameAuto;
-            Row(settings,"Frame ratio",new Field(frameRatio,34),"Image models such as Nano Banana draw only a few fixed ratios. Exporting one of them keeps the model from stretching or recomposing the view: auto turns the 1024 × 589 frame into 16:9. Camera and perspective stay the same. Set the model node in ComfyUI to the same ratio, or to auto. Background blend keeps the Wallpaper ratio.");
+            Row(settings,"Frame ratio",new Field(frameRatio,32),"Image models such as Nano Banana draw only a few fixed ratios. Exporting one of them keeps the model from stretching or recomposing the view: auto turns the 1024 × 589 frame into 16:9. Camera and perspective stay the same. Set the model node in ComfyUI to the same ratio, or to auto. Background blend keeps the Wallpaper ratio.");
 
             var ai=Stack();
             foreach(var provider in AiProviders.All)engine.Items.Add(provider);
-            Row(ai,"Engine",new Field(engine,34),"The tool that renders the ticked views. A vendor API renders directly, without ComfyUI. The ComfyUI engine queues the API workflow from Export settings.");
-            Row(ai,"API key",new Field(apiKey,34),"Saved encrypted for your Windows account and sent only to the API address below. Leave empty to use the vendor's environment variable, such as GEMINI_API_KEY.");
-            Row(ai,"Model",new Field(model,34),"Pick a suggestion or type any image model the vendor offers.");
-            Row(ai,"Aspect ratio",new Field(aspect,34),"auto follows the exported frame. The list shows what the chosen engine accepts.");
-            Row(ai,"Resolution",new Field(resolution,34),"Output size. The choices follow the engine and model: Gemini 3 and Seedream take 1K, 2K or 4K, Gemini 2.5 is fixed, and GPT Image takes a quality level instead. auto follows Longest edge on the Export settings page.");
+            Row(ai,"Engine",new Field(engine,32),"The tool that renders the ticked views. A vendor API renders directly, without ComfyUI. The ComfyUI engine queues the API workflow from Export settings.");
+            Row(ai,"API key",new Field(apiKey,32),"Saved encrypted for your Windows account and sent only to the API address below. Leave empty to use the vendor's environment variable, such as GEMINI_API_KEY.");
+            Row(ai,"Model",new Field(model,32),"Pick a suggestion or type any image model the vendor offers.");
+            Row(ai,"Aspect ratio",new Field(aspect,32),"auto follows the exported frame. The list shows what the chosen engine accepts.");
+            Row(ai,"Resolution",new Field(resolution,32),"Output size. The choices follow the engine and model: Gemini 3 and Seedream take 1K, 2K or 4K, Gemini 2.5 is fixed, and GPT Image takes a quality level instead. auto follows Longest edge on the Export settings page.");
             model.TextChanged+=(s,e)=>FillOptions(false);
-            Row(ai,"API address",new Field(apiUrl,34),"Change only when you use a proxy or a compatible gateway.");
-            foreach(var list in new[]{views,channels}){list.BorderStyle=BorderStyle.None;list.CheckOnClick=true;list.IntegralHeight=false;}
+            Row(ai,"API address",new Field(apiUrl,32),"Change only when you use a proxy or a compatible gateway.");
+            
             channels.MultiColumn=true;channels.ColumnWidth=Theme.S(150);
             Row(ai,"Named views to render",new Field(views,132),"Every ticked view is restored in the active viewport, exported and rendered in turn. Your current view comes back afterwards.");
-            var viewActions=new FlowLayoutPanel{AutoSize=true,Margin=new Padding(0,0,0,Theme.S(8))};
+            var viewActions=new FlowLayoutPanel{AutoSize=true,Margin=new Padding(0,Theme.S(8),0,0)};
             viewActions.Controls.Add(Button("Reload views",delegate{FillViews(TickedViews());}));viewActions.Controls.Add(Button("All",delegate{for(int i=1;i<views.Items.Count;i++)views.SetItemChecked(i,true);},ButtonKind.Ghost));viewActions.Controls.Add(Button("None",delegate{for(int i=0;i<views.Items.Count;i++)views.SetItemChecked(i,false);},ButtonKind.Ghost));Add(ai,viewActions);
             Row(ai,"Control images to send",new Field(channels,72),"Fewer images are faster and cheaper. Background blend always sends its own reference, placement and mask set.");
             aiPrompt.Multiline=true;aiPrompt.ScrollBars=ScrollBars.Vertical;aiPrompt.Text=config.AiPrompt;aiOutput.Text=config.AiOutput;
             Row(ai,"Prompt",new Field(aiPrompt,96),"The look you want. Image roles and the layer material mapping are added automatically.");
             Row(ai,"Style reference photos (optional)",new Field(references,76),"Real photographs whose look you want: lighting, color grading, material realism and atmosphere. The engine borrows only the style. Geometry and camera still come from Rhino. Up to "+StyleReferences.Max+" images, sent with every view.");
-            var referenceActions=new FlowLayoutPanel{AutoSize=true,Margin=new Padding(0,0,0,Theme.S(8))};
+            var referenceActions=new FlowLayoutPanel{AutoSize=true,Margin=new Padding(0,Theme.S(8),0,0)};
             referenceActions.Controls.Add(Button("Add photos",AddReferences));referenceActions.Controls.Add(Button("Remove",delegate{foreach(var item in references.SelectedItems.Cast<object>().ToList())references.Items.Remove(item);},ButtonKind.Ghost));referenceActions.Controls.Add(Button("Clear",delegate{references.Items.Clear();},ButtonKind.Ghost));Add(ai,referenceActions);
             foreach(var path in config.AiReferences??new List<string>())references.Items.Add(path);
             Row(ai,"Render folder",Browse(aiOutput,false,true),"Finished images are saved here, named after their view.");
@@ -159,28 +159,28 @@ namespace RhinoAI
             foreach(var page in new[]{Page("Sync",sync),Page("AI render",ai),Page("Layer materials",material),Page("Background blend",blend),Page("Export settings",settings)}){pages.Add(page);host.Controls.Add(page);}
 
             // The AI render page swaps in its own bar, so Render ticked views is always in sight.
-            foreach(var bar in new[]{actions,aiActions}){bar.Dock=DockStyle.Fill;bar.Margin=Padding.Empty;bar.Padding=new Padding(Theme.S(24),Theme.S(10),0,0);bar.WrapContents=false;}
+            foreach(var bar in new[]{actions,aiActions}){bar.Dock=DockStyle.Fill;bar.Margin=Padding.Empty;bar.Padding=new Padding(Theme.S(24),Theme.S(12),0,0);bar.WrapContents=false;}
             var bars=new Panel{Dock=DockStyle.Fill,Margin=Padding.Empty};bars.Controls.Add(actions);bars.Controls.Add(aiActions);
             actions.Controls.Add(Button("Update to ComfyUI",async delegate{await Export(true,false);},ButtonKind.Primary));actions.Controls.Add(Button("Export only",async delegate{await Export(false,false);}));
             actions.Controls.Add(Tip(Button("Export folder",delegate{if(last!=null)Open(last.Directory);else if(Directory.Exists(output.Text))Open(output.Text);},ButtonKind.Ghost),"Opens the latest export, or the export folder."));actions.Controls.Add(Tip(Button("Change export folder",ChangeExportFolder,ButtonKind.Ghost),"Chooses where exports are written. The same setting as Export folder on the Export settings page."));actions.Controls.Add(Button("Open ComfyUI",delegate{Read();Open(config.Server);},ButtonKind.Ghost));
             log.Multiline=true;log.ReadOnly=true;log.BorderStyle=BorderStyle.None;log.ScrollBars=ScrollBars.None;log.Dock=DockStyle.Fill;log.BackColor=Theme.Bg;log.ForeColor=Theme.Muted;log.Font=mono;log.TabStop=false;
-            var logHost=new Panel{Dock=DockStyle.Fill,Margin=Padding.Empty,Padding=new Padding(Theme.S(28),Theme.S(8),Theme.S(8),Theme.S(8))};logHost.Controls.Add(log);
+            var logHost=new Panel{Dock=DockStyle.Fill,Margin=Padding.Empty,Padding=new Padding(Theme.S(24),Theme.S(12),Theme.S(24),Theme.S(12))};logHost.Controls.Add(log);
 
             var main=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=5,Margin=Padding.Empty};main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-            main.RowStyles.Add(new RowStyle(SizeType.Percent,100));main.RowStyles.Add(new RowStyle(SizeType.Absolute,1));main.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(54)));main.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(2)));main.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(92)));
+            main.RowStyles.Add(new RowStyle(SizeType.Percent,100));main.RowStyles.Add(new RowStyle(SizeType.Absolute,1));main.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(56)));main.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(8)));main.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(92)));
             main.Controls.Add(host,0,0);main.Controls.Add(new Panel{Dock=DockStyle.Fill,BackColor=Theme.Border,Margin=Padding.Empty},0,1);main.Controls.Add(bars,0,2);main.Controls.Add(progress,0,3);main.Controls.Add(logHost,0,4);
 
-            var side=new Panel{Dock=DockStyle.Left,Width=Theme.S(176),BackColor=Theme.Side};
-            var menu=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,BackColor=Theme.Side,Padding=new Padding(Theme.S(10),Theme.S(14),Theme.S(10),Theme.S(8))};menu.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-            menu.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(46)));menu.Controls.Add(new Label{Text="Rhino to Comfy",Font=Theme.Title(),Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(Theme.S(8),0,0,Theme.S(6)),Margin=Padding.Empty},0,0);
+            var side=new Panel{Dock=DockStyle.Left,Width=Theme.S(216),BackColor=Theme.Side};
+            var menu=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,BackColor=Theme.Side,Padding=new Padding(Theme.S(12),Theme.S(16),Theme.S(12),Theme.S(12))};menu.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+            menu.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(52)));menu.Controls.Add(new Label{Text="Rhino to Comfy",Font=Theme.Brand(),ForeColor=Theme.Text,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(Theme.S(10),0,0,Theme.S(12)),Margin=Padding.Empty},0,0);
             string[] names={"Sync","AI render","Layer materials","Background blend","Export settings"};
             for(int i=0;i<names.Length;i++)
             {
                 int index=i;var item=new FlatButton{Text=names[i],Kind=ButtonKind.Nav,Dock=DockStyle.Fill,Margin=new Padding(0,Theme.S(1),0,Theme.S(1)),Font=Theme.Body()};item.Click+=(s,e)=>Go(index);
-                nav.Add(item);menu.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(34)));menu.Controls.Add(item,0,i+1);
+                nav.Add(item);menu.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(38)));menu.Controls.Add(item,0,i+1);
             }
             menu.RowStyles.Add(new RowStyle(SizeType.Percent,100));menu.Controls.Add(new Panel{Margin=Padding.Empty},0,names.Length+1);
-            menu.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(28)));menu.Controls.Add(connection,0,names.Length+2);
+            menu.RowStyles.Add(new RowStyle(SizeType.Absolute,Theme.S(36)));menu.Controls.Add(connection,0,names.Length+2);
             side.Controls.Add(menu);side.Controls.Add(new Panel{Dock=DockStyle.Right,Width=1,BackColor=Theme.Border});
             Controls.Add(main);Controls.Add(side);Go(0);
 
@@ -196,31 +196,32 @@ namespace RhinoAI
         void Go(int index){for(int i=0;i<pages.Count;i++){pages[i].Visible=i==index;nav[i].Selected=i==index;}aiActions.Visible=index==1;actions.Visible=index!=1;}
         static Panel Page(string title,Control body)
         {
-            var page=new Panel{Dock=DockStyle.Fill,Visible=false,Padding=new Padding(Theme.S(28),Theme.S(18),Theme.S(20),Theme.S(12))};body.Dock=DockStyle.Fill;page.Controls.Add(body);
-            page.Controls.Add(new Label{Text=title,Font=Theme.Title(),Dock=DockStyle.Top,Height=Theme.S(46),ForeColor=Theme.Text});return page;
+            var page=new Panel{Dock=DockStyle.Fill,Visible=false,Padding=new Padding(Theme.S(24),Theme.S(20),Theme.S(24),Theme.S(16))};body.Dock=DockStyle.Fill;page.Controls.Add(body);
+            page.Controls.Add(new Label{Text=title,Font=Theme.Title(),Dock=DockStyle.Top,Height=Theme.S(56),ForeColor=Theme.Text});return page;
         }
         static TableLayoutPanel Stack(){var p=new TableLayoutPanel{AutoScroll=true,ColumnCount=1,Padding=new Padding(0,0,Theme.S(12),0)};p.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));return p;}
         static void Add(TableLayoutPanel panel,Control control){int row=panel.RowCount++;panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));panel.Controls.Add(control,0,row);}
         void Row(TableLayoutPanel panel,string text,Control control,string tip)
         {
-            var label=new Label{Text=text,AutoSize=true,ForeColor=Theme.Muted,Font=Theme.Small(),Margin=new Padding(Theme.S(2),Theme.S(6),0,Theme.S(4))};Add(panel,label);
-            control.Dock=DockStyle.Top;control.Margin=new Padding(0,0,0,Theme.S(8));Add(panel,control);if(tip!=null){tips.SetToolTip(label,tip);Tip(control,tip);}
+            // md-field: a label-13 medium label, space-2 to its control, space-4 between fields.
+            var label=new Label{Text=text,AutoSize=true,ForeColor=Theme.Muted,Font=Theme.Label(),Margin=new Padding(0,panel.RowCount==0?0:Theme.S(16),0,Theme.S(8))};Add(panel,label);
+            control.Dock=DockStyle.Top;control.Margin=new Padding(0,0,0,0);Add(panel,control);if(tip!=null){tips.SetToolTip(label,tip);Tip(control,tip);}
         }
         Control Tip(Control control,string text){tips.SetToolTip(control,text);foreach(Control child in control.Controls)Tip(child,text);return control;}
-        void Check(CheckBox box,string text,bool value,string tip){box.Text=text;box.Checked=value;Theme.Style(box);box.Margin=new Padding(0,Theme.S(3),0,Theme.S(3));tips.SetToolTip(box,tip);}
+        void Check(CheckBox box,string text,bool value,string tip){box.Text=text;box.Checked=value;Theme.Style(box);box.Margin=new Padding(0,Theme.S(6),0,Theme.S(6));tips.SetToolTip(box,tip);}
         static FlatButton Button(string text,Action action,ButtonKind kind=ButtonKind.Secondary)
         {
-            var button=new FlatButton{Text=text,Kind=kind,AutoSize=true,Font=kind==ButtonKind.Primary?Theme.Strong():Theme.Body(),Margin=new Padding(0,0,Theme.S(8),0)};
+            var button=new FlatButton{Text=text,Kind=kind,AutoSize=true,Font=Theme.Strong(),Margin=new Padding(0,0,Theme.S(8),0)};
             button.Click+=(s,e)=>{try{action();}catch(Exception error){MessageBox.Show(error.Message,"Rhino to Comfy");}};return button;
         }
         static Control Pair(Control field,Control button)
         {
-            var p=new TableLayoutPanel{ColumnCount=2,RowCount=1,Height=Theme.S(34)};p.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));p.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));p.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-            field.Dock=DockStyle.Fill;field.Margin=new Padding(0,0,Theme.S(8),0);button.Margin=new Padding(0,Theme.S(1),0,0);p.Controls.Add(field,0,0);p.Controls.Add(button,1,0);return p;
+            var p=new TableLayoutPanel{ColumnCount=2,RowCount=1,Height=Theme.S(32)};p.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));p.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));p.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            field.Dock=DockStyle.Fill;field.Margin=new Padding(0,0,Theme.S(8),0);button.Margin=new Padding(0,0,0,0);p.Controls.Add(field,0,0);p.Controls.Add(button,1,0);return p;
         }
         static Control Browse(TextBox text,bool json,bool folder)
         {
-            return Pair(new Field(text,34),Button("Browse",delegate{if(folder){using(var dlg=new FolderBrowserDialog()){dlg.SelectedPath=text.Text;if(dlg.ShowDialog()==DialogResult.OK)text.Text=dlg.SelectedPath;}}else using(var dlg=new OpenFileDialog{Filter=json?"API JSON|*.json":"Images|*.png;*.jpg;*.jpeg;*.bmp"}){if(dlg.ShowDialog()==DialogResult.OK)text.Text=dlg.FileName;}}));
+            return Pair(new Field(text,32),Button("Browse",delegate{if(folder){using(var dlg=new FolderBrowserDialog()){dlg.SelectedPath=text.Text;if(dlg.ShowDialog()==DialogResult.OK)text.Text=dlg.SelectedPath;}}else using(var dlg=new OpenFileDialog{Filter=json?"API JSON|*.json":"Images|*.png;*.jpg;*.jpeg;*.bmp"}){if(dlg.ShowDialog()==DialogResult.OK)text.Text=dlg.FileName;}}));
         }
         void PaintSwatch(object sender,DataGridViewCellPaintingEventArgs e)
         {
