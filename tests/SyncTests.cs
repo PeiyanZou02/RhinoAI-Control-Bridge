@@ -29,7 +29,7 @@ namespace RhinoAI
                     return Reply(new JObject{["name"]="server_"+filename,["subfolder"]=folder}.ToString());
                 }
                 if(request.Method==HttpMethod.Get&&path=="/userdata")return Reply("[{\"path\":\"old.json\",\"modified\":1},{\"path\":\"sub\\\\new.json\",\"modified\":9},{\"path\":\"notes.txt\",\"modified\":5}]");
-                if(request.Method==HttpMethod.Get&&path=="/userdata/rhino_ai_frontend_status.json")return Reply("{\"version\":27,\"state\":\"bound\",\"active\":\"CHOGA.json\",\"images\":9}");
+                if(request.Method==HttpMethod.Get&&path=="/userdata/rhino_ai_frontend_status.json")return Reply("{\"version\":28,\"state\":\"bound\",\"active\":\"CHOGA.json\",\"images\":9}");
                 if(request.Method==HttpMethod.Post&&path=="/userdata/rhino_ai_latest.json"){Published=JObject.Parse(await request.Content.ReadAsStringAsync());return Reply("{}");}
                 throw new Exception("Forbidden/unexpected request: "+request.Method+" "+path);
             }
@@ -54,6 +54,9 @@ namespace RhinoAI
             check(recorder.Published["prompts"]["positive_prompt"]==null&&recorder.Published["prompts"]["wear_prompt"]==null,"no unrelated automatic style prompt published");
             check(!recorder.Published.ToString().Contains("api_key"),"no API credentials transmitted");
             check(recorder.Published["target"]==null,"no target published when following the active ComfyUI window");
+            check((string)recorder.Published["prompts"]["material_id_style"]=="labeled"&&recorder.Published["prompts"]["mask_materials"]!=null,"the ID map style and mask names travel with the manifest");
+            var withMasks=ComfyClient.SelectForBatch(new Dictionary<string,string>{{"rendered",png},{"material_mask_2",png},{"material_mask_1",png},{"material_mask_10",png}},new Config{MaterialMasks=true});
+            check(withMasks.Keys.SequenceEqual(new[]{"rendered","material_mask_1","material_mask_2","material_mask_10"})&&!ComfyClient.SelectForBatch(new Dictionary<string,string>{{"rendered",png},{"material_mask_1",png}},new Config()).ContainsKey("material_mask_1"),"masks join a sync in numeric order, only when asked for");
             var targeted=new Recorder();var targetConfig=new Config{Workflow="",TargetWorkflow="CHOGA.json"};
             Func<bool,string> publish=switchWindow=>{Task.Run(async()=>{using(var client=new ComfyClient("http://localhost:8000",targeted))await client.Send(export,targetConfig,switchWindow);}).GetAwaiter().GetResult();return (string)targeted.Published["target"]["request"];};
             string first=publish(true);check((string)targeted.Published["target"]["workflow"]=="CHOGA.json"&&first.Length==32,"target workflow and request id published");
@@ -82,7 +85,7 @@ namespace RhinoAI
             check(styled.Calls.All(x=>!x.Contains("/prompt")&&!x.Contains("/queue")),"style references do not start a generation");
             var crowded=Enumerable.Range(0,14).ToDictionary(i=>new[]{"reference","placement","scale_lock","shape_lock","rendered","depth","edges","silhouette","normal","mask","material_id","object_mask","inpaint_mask","occlusion_mask"}[i],i=>png);crowded["style_reference_1"]=photo;
             check(!ComfyClient.SelectForBatch(crowded,new Config{ProductMode=true,DetailPriority=false}).ContainsKey("style_reference_1"),"a full 14-image batch leaves the style photos out instead of failing");
-            check(ComfyClient.DescribeStatus(new JObject{["version"]=26,["state"]="bound"},"").Contains("outdated"),"extension without style reference support is reported as outdated");
+            check(ComfyClient.DescribeStatus(new JObject{["version"]=27,["state"]="bound"},"").Contains("outdated"),"extension without style reference support is reported as outdated");
             return count+" sync checks passed";
         }
     }

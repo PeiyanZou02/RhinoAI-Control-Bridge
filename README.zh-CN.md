@@ -203,6 +203,14 @@ Export settings 页面的 **Longest edge** 决定所有控制图的尺寸，默�
 
 Layer materials 页面顶部的 **Material ID regions from** 决定分区依据。**Rhino layers**（默认）按图层分区，颜色取图层显示色；**Rhino materials** 按对象实际使用的渲染材质分区，按 Rhino 的显示规则解析（按对象、按图层或按父级块），同一图层上材质不同的部件也能分开。两种模式各自保存目标材质表和 ID 颜色；材质模式的颜色由插件调色板分配，不会改动 Rhino 材质。**Create layer materials** 只对图层模式有效。
 
+### 防止 ID 颜色漏进渲染结果
+
+图像模型会把饱和的纯色当成涂料，紫色 ID 区域容易被画成紫色木头。插件提供三项措施，默认开启或一键可开：
+
+- **Write the material name on each region and soften the ID colors**（Layer materials 页面，默认开）：`material_id` 使用 ID 颜色的淡彩版本（同色相、低饱和），并在每个足够大的区域上写上目标材质名。模型读文字远比读十六进制可靠；映射表引用的也是淡彩后的颜色。关闭则导出原始纯色。
+- **Also send one mask per material**（默认关）：按面积顺序输出 `material_mask_1`、`material_mask_2`……最多 12 张，每张白色处即该材质所在。蒙版没有色相可漏。AI render 和 Update to ComfyUI 都会把它们排在控制图之后，每种材质占一张图。
+- **Check the result for ID color leaks and retry once**（AI render 页面，默认开）：每次渲染后比较每个区域的平均色和它的 ID 颜色。若某区域呈现了 ID 色相、而材质名又不该是这个颜色，就记录日志、把这张图保存为 `<视图>_<时间>_rejected.png`，并带着纠正说明重试一次。红色 ID 上的 “red brick” 不算漏色。
+
 图层模式下，Material ID 使用黑色背景，并严格跟随 Rhino 图层显示颜色。插件会把完全相同的 HEX 编码写进材质映射 Prompt。相邻部件不容易区分时，可以点击 **Assign contrast colors**。正在使用的图层必须采用不同的非黑色颜色，避免材质区域含混或消失。
 
 ## 构建与测试

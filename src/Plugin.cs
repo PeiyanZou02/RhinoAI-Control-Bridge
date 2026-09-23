@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.39.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.40.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -56,7 +56,7 @@ namespace RhinoAI
         readonly TextBox server=new TextBox(),output=new TextBox(),workflow=new TextBox(),wear=new TextBox(),occlusion=new TextBox();
         readonly ComboBox target=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly NumericUpDown edge=new NumericUpDown(),padding=new NumericUpDown();
-        readonly CheckBox selected=new FlatCheck(),tryon=new FlatCheck(),autoSync=new FlatCheck(),syncStyle=new FlatCheck(),detailPriority=new FlatCheck(),adaptiveMask=new FlatCheck(),wallpaperAspect=new FlatCheck(),sceneAspect=new FlatCheck();
+        readonly CheckBox selected=new FlatCheck(),tryon=new FlatCheck(),autoSync=new FlatCheck(),syncStyle=new FlatCheck(),detailPriority=new FlatCheck(),adaptiveMask=new FlatCheck(),wallpaperAspect=new FlatCheck(),sceneAspect=new FlatCheck(),labeledIds=new FlatCheck(),materialMasks=new FlatCheck(),retryLeak=new FlatCheck();
         readonly ComboBox engine=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},model=new ComboBox(),frameRatio=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},aspect=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList},resolution=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
         readonly TextBox apiKey=new TextBox{UseSystemPasswordChar=true},apiUrl=new TextBox(),aiPrompt=new TextBox(),aiOutput=new TextBox();
         readonly CheckedListBox views=new CheckList(),channels=new CheckList();
@@ -94,6 +94,9 @@ namespace RhinoAI
             Check(selected,"Export selected objects only",config.SelectedOnly,"Recommended for background blend, so only the objects to insert are exported.");
             Check(autoSync,"Upload automatically when the scene changes",config.AutoSync,"Uploads images only. It never edits your prompt, starts a generation or switches the ComfyUI window.");
             Check(syncStyle,"Send the style reference photos",config.SyncReferences,"Adds the photos listed under Style reference photos on the AI render page to the Batch Images, and tells the model to borrow only their look.");
+            Check(labeledIds,"Write the material name on each region and soften the ID colors",config.MaterialIdStyle!="flat","The model reads a name on the region far more reliably than a hex code, and a pastel color leaks only a faint tint. Off: the raw flat colors.");
+            Check(materialMasks,"Also send one mask per material",config.MaterialMasks,"A white-on-black mask per material, up to 12, sent after the other images. A mask has no color to leak. Costs one image per material.");
+            Check(retryLeak,"Check the result for ID color leaks and retry once",config.AiRetryOnLeak,"After each render the average hue of every region is compared with its ID color. A match is logged, the image is kept as _rejected, and one corrected attempt follows.");
             Check(tryon,"Blend into the Wallpaper background",config.ProductMode,"Uses the viewport Wallpaper photo as the base image and exports placement, masks and blend constraints for the Rhino objects.");
             Check(wallpaperAspect,"Match the Wallpaper aspect ratio",config.MatchWallpaperAspect,"Crops the empty viewport margins. Camera and perspective stay unchanged.");
             Check(detailPriority,"Detail priority",config.DetailPriority,"Adds magnified geometry images when the objects are small in the frame. At most 14 images.");
@@ -105,7 +108,8 @@ namespace RhinoAI
             targetStatus.AutoSize=true;targetStatus.ForeColor=Theme.Muted;targetStatus.Font=Theme.Small();targetStatus.Margin=new Padding(0,Theme.S(8),0,Theme.S(24));targetStatus.Text=" ";Add(sync,targetStatus);
             Add(sync,selected);Add(sync,autoSync);Add(sync,syncStyle);
 
-            var material=new TableLayoutPanel{ColumnCount=1,RowCount=3};material.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            var material=new TableLayoutPanel{ColumnCount=1,RowCount=4};material.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            var idOptions=new FlowLayoutPanel{FlowDirection=FlowDirection.TopDown,AutoSize=true,WrapContents=false,Margin=new Padding(0,0,0,Theme.S(8))};idOptions.Controls.Add(labeledIds);idOptions.Controls.Add(materialMasks);material.Controls.Add(idOptions,0,1);
             idSource.Items.Add("Rhino layers");idSource.Items.Add("Rhino materials");idSource.SelectedIndex=config.ByMaterial()?1:0;
             var sourceRow=new TableLayoutPanel{ColumnCount=2,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Anchor=AnchorStyles.Left|AnchorStyles.Top,Margin=new Padding(0,0,0,Theme.S(16))};sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             sourceRow.Controls.Add(new Label{Text="Material ID regions from",AutoSize=true,ForeColor=Theme.Muted,Font=Theme.Label(),Margin=new Padding(0,Theme.S(9),Theme.S(12),0)},0,0);
@@ -117,11 +121,11 @@ namespace RhinoAI
             materialActions.Controls.Add(Tip(Button("Assign contrast colors",AssignHighContrastColors),"Gives every row a distinct Material ID color. For layers this changes the layer display color, with undo; for materials only the export color changes."));
             materialActions.Controls.Add(Tip(Button("Names as targets",delegate{ReadGrid(false);foreach(var rule in config.Rules())rule.Material=MaterialRules.TargetFromName(rule.Name);FillLayers();config.Save();Log("Target materials filled from the "+(config.ByMaterial()?"material":"layer")+" names. Edit any row that needs a fuller description.");}),"Writes every Rhino name into Target material, cleaned up: library prefixes and parent layers dropped, underscores to spaces. Replaces what is there."));
             createMaterials=Button("Create layer materials",delegate{Read();ApplyMaterials();});materialActions.Controls.Add(Tip(createMaterials,"Creates basic Rhino materials from the target materials in the table. Undo is supported. Only for layer regions."));
-            material.Controls.Add(materialActions,0,1);
+            material.Controls.Add(materialActions,0,2);
             layers.Dock=DockStyle.Fill;layers.AllowUserToAddRows=false;layers.AllowUserToDeleteRows=false;layers.AllowUserToResizeRows=false;layers.RowHeadersVisible=false;layers.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;Theme.Style(layers);
             layers.Columns.Add(new DataGridViewTextBoxColumn{Name="Layer",HeaderText="Layer",ReadOnly=true,Width=Theme.S(220)});layers.Columns.Add(new DataGridViewTextBoxColumn{Name="Color",HeaderText="ID color",ReadOnly=true,Width=Theme.S(130)});layers.Columns.Add(new DataGridViewTextBoxColumn{Name="Material",HeaderText="Target material",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});
             layers.CellPainting+=PaintSwatch;
-            var gridCard=new Card{Dock=DockStyle.Fill,Margin=Padding.Empty,Padding=new Padding(Theme.S(2))};gridCard.Controls.Add(layers);material.Controls.Add(gridCard,0,2);FillLayers();
+            var gridCard=new Card{Dock=DockStyle.Fill,Margin=Padding.Empty,Padding=new Padding(Theme.S(2))};gridCard.Controls.Add(layers);material.Controls.Add(gridCard,0,3);FillLayers();
 
             var blend=Stack();
             wear.Multiline=true;wear.ScrollBars=ScrollBars.Vertical;wear.Text=config.WearInstructions;padding.Minimum=0;padding.Maximum=256;padding.Value=config.MaskPadding;occlusion.Text=config.OcclusionMask;
@@ -152,6 +156,7 @@ namespace RhinoAI
             var viewActions=new FlowLayoutPanel{AutoSize=true,Margin=new Padding(0,Theme.S(8),0,0)};
             viewActions.Controls.Add(Button("Reload views",delegate{FillViews(TickedViews());}));viewActions.Controls.Add(Button("All",delegate{for(int i=1;i<views.Items.Count;i++)views.SetItemChecked(i,true);},ButtonKind.Ghost));viewActions.Controls.Add(Button("None",delegate{for(int i=0;i<views.Items.Count;i++)views.SetItemChecked(i,false);},ButtonKind.Ghost));Add(ai,viewActions);
             Row(ai,"Control images to send",new Field(channels,72),"Fewer images are faster and cheaper. Background blend always sends its own reference, placement and mask set.");
+            Add(ai,retryLeak);
             aiPrompt.Multiline=true;aiPrompt.ScrollBars=ScrollBars.Vertical;aiPrompt.Text=config.AiPrompt;aiOutput.Text=config.AiOutput;
             Row(ai,"Prompt",new Field(aiPrompt,96),"The look you want. Image roles and the layer material mapping are added automatically.");
             Row(ai,"Style reference photos (optional)",new Field(references,76),"Real photographs whose look you want: lighting, color grading, material realism and atmosphere. The engine borrows only the style. Geometry and camera still come from Rhino. Up to "+StyleReferences.Max+" images, sent with every view.");
@@ -294,7 +299,7 @@ namespace RhinoAI
         }
         void Read()
         {
-            ReadGrid(true);config.MaterialIdSource=idSource.SelectedIndex==1?"material":"layer";
+            ReadGrid(true);config.MaterialIdSource=idSource.SelectedIndex==1?"material":"layer";config.MaterialIdStyle=labeledIds.Checked?"labeled":"flat";config.MaterialMasks=materialMasks.Checked;config.AiRetryOnLeak=retryLeak.Checked;
             config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.TargetWorkflow=SelectedTarget();config.LongEdge=(int)edge.Value;config.LockSceneAspect=sceneAspect.Checked;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.MatchWallpaperAspect=wallpaperAspect.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;config.SyncReferences=syncStyle.Checked;
             string chosen=Convert.ToString(frameRatio.SelectedItem);config.FrameRatio=chosen==FrameAsIs?"frame":chosen==FrameAuto?"auto":chosen;
             StoreEngine();config.AiEngine=shown.Id;config.AiPrompt=aiPrompt.Text;config.AiOutput=aiOutput.Text.Trim();config.AiChannels=channels.CheckedItems.Cast<string>().ToList();config.AiViews=TickedViews();config.AiReferences=references.Items.Cast<string>().ToList();
@@ -389,6 +394,20 @@ namespace RhinoAI
                             string prompt=PromptGuide.Build(inputs.Select(x=>x.Key).ToList(),last,config);File.WriteAllText(Path.Combine(last.Directory,"ai_prompt.txt"),prompt,System.Text.Encoding.UTF8);
                             Log("["+(i+1)+"/"+names.Count+"] "+label+": sending "+inputs.Count+" images to "+shown.Name+"…");
                             using(var client=new AiClient())images=await client.Generate(shown,settings,key,prompt,inputs,snapshot.Camera.Width,snapshot.Camera.Height,token);
+                            if(config.AiRetryOnLeak&&!config.ProductMode&&images.Count>0)
+                            {
+                                var leaks=LeakCheck.Inspect(images[0].Bytes,last);
+                                if(leaks.Count>0)
+                                {
+                                    string rejected=Path.Combine(config.AiOutput,FileName(label)+"_"+DateTime.Now.ToString("yyyyMMdd_HHmmss")+"_rejected"+images[0].Extension);File.WriteAllBytes(rejected,images[0].Bytes);
+                                    Log("["+(i+1)+"/"+names.Count+"] "+label+": ID color leak, "+string.Join("; ",leaks)+". Kept as "+Path.GetFileName(rejected)+", retrying once with a correction…");
+                                    string corrected=prompt+"\nREJECTED PREVIOUS ATTEMPT: "+string.Join("; ",leaks)+". Those regions were painted in their ID label colors, which is forbidden. Repaint each of them in the natural color of its mapped material and keep everything else exactly as specified.";
+                                    token.ThrowIfCancellationRequested();
+                                    using(var client=new AiClient())images=await client.Generate(shown,settings,key,corrected,inputs,snapshot.Camera.Width,snapshot.Camera.Height,token);
+                                    var again=images.Count>0?LeakCheck.Inspect(images[0].Bytes,last):new List<string>();
+                                    Log("["+(i+1)+"/"+names.Count+"] "+label+(again.Count==0?": the retry passed the ID color check.":": the retry still shows "+string.Join("; ",again)+". Consider a clearer material name or the per-material masks."));
+                                }
+                            }
                         }
                         else
                         {
@@ -439,7 +458,7 @@ namespace RhinoAI
         }
         string SyncSettingsSignature()
         {
-            return string.Join("|",new[]{server.Text,output.Text,workflow.Text,Convert.ToString(target.SelectedItem),edge.Value.ToString(),idSource.SelectedIndex.ToString(),sceneAspect.Checked.ToString(),Convert.ToString(frameRatio.SelectedItem),selected.Checked.ToString(),syncStyle.Checked.ToString(),string.Join(";",references.Items.Cast<string>().Select(p=>p+AutoSyncWatcher.FileStamp(p))),tryon.Checked.ToString(),wallpaperAspect.Checked.ToString(),detailPriority.Checked.ToString(),adaptiveMask.Checked.ToString(),wear.Text,padding.Value.ToString(),occlusion.Text,AutoSyncWatcher.FileStamp(occlusion.Text),string.Join(";",layers.Rows.Cast<DataGridViewRow>().Select(r=>string.Join("|",r.Cells.Cast<DataGridViewCell>().Select(c=>Convert.ToString(c.Value)))))});
+            return string.Join("|",new[]{server.Text,output.Text,workflow.Text,Convert.ToString(target.SelectedItem),edge.Value.ToString(),idSource.SelectedIndex.ToString(),labeledIds.Checked.ToString(),materialMasks.Checked.ToString(),sceneAspect.Checked.ToString(),Convert.ToString(frameRatio.SelectedItem),selected.Checked.ToString(),syncStyle.Checked.ToString(),string.Join(";",references.Items.Cast<string>().Select(p=>p+AutoSyncWatcher.FileStamp(p))),tryon.Checked.ToString(),wallpaperAspect.Checked.ToString(),detailPriority.Checked.ToString(),adaptiveMask.Checked.ToString(),wear.Text,padding.Value.ToString(),occlusion.Text,AutoSyncWatcher.FileStamp(occlusion.Text),string.Join(";",layers.Rows.Cast<DataGridViewRow>().Select(r=>string.Join("|",r.Cells.Cast<DataGridViewCell>().Select(c=>Convert.ToString(c.Value)))))});
         }
         async Task Export(bool send,bool automatic)
         {

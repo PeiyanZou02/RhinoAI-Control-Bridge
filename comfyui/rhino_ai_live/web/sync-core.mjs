@@ -3,10 +3,12 @@ export const EXCLUDED = new Set(["object_id", "color_code", "basecolor", "linear
 export function channelsFor(data) {
   if(data.images.reference&&data.images.shape_lock_detail) {
     const optimized=["reference","placement","scale_lock","shape_lock_detail","material_id_detail","normal_detail","edges_detail","depth_detail","object_mask","inpaint_mask","occlusion_mask"];
-    return [...optimized.filter(key=>data.images[key]),...Object.keys(data.images).filter(key=>!ORDER.includes(key)).sort()].filter(key=>!EXCLUDED.has(key));
+    return [...optimized.filter(key=>data.images[key]),...Object.keys(data.images).filter(key=>!ORDER.includes(key)).sort(natural)].filter(key=>!EXCLUDED.has(key));
   }
-  return [...ORDER.filter(key=>data.images[key]), ...Object.keys(data.images).filter(key=>!ORDER.includes(key)).sort()].filter(key=>!EXCLUDED.has(key));
+  return [...ORDER.filter(key=>data.images[key]), ...Object.keys(data.images).filter(key=>!ORDER.includes(key)).sort(natural)].filter(key=>!EXCLUDED.has(key));
 }
+// material_mask_2 before material_mask_10.
+const natural=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true});
 const settle = () => new Promise(resolve => {
   if(typeof requestAnimationFrame === "function") requestAnimationFrame(()=>requestAnimationFrame(resolve));
   else setTimeout(resolve,0);
@@ -64,13 +66,16 @@ const CAMERA_LOCK_START = "MANDATORY CAMERA AND COMPOSITION LOCK: this is an in-
 const CAMERA_LOCK_END = " as the base canvas and repaint its surfaces where they are. The output must overlay the control images pixel for pixel: identical camera position, height, tilt, rotation, lens, framing and crop, with every object, gap and edge at the same pixel location and the same size. Do not re-shoot from another angle, lower or raise the camera, zoom, re-center, rotate or tidy the arrangement, and do not complete, extend or crop the object differently. Do not add anything the geometry does not contain: no base, plinth, pedestal, extra thickness, supports, table, walls, props or people. Areas that are empty in the control images stay plain background or ground.";
 const CAMERA_CHECK = "FINAL CAMERA CHECK BEFORE OUTPUT: overlay the result on shape_lock. If the outline, the object positions or the perspective do not coincide, the image is wrong: redo it from the locked camera.";
 const MATERIAL_ASSIGNMENT = "MATERIAL ASSIGNMENT RULE: materials are assigned by region, never guessed from what an object usually is. For each line of the mapping, find the region of that named color in the material_id image, then give exactly those pixels the material written after the equals sign, and nothing else. Do not swap materials between regions, do not move a material to the object where it seems more typical, and do not give two regions the same look unless the mapping names the same material for both. The share of the frame given for each region tells you which region is which: the largest share is the largest surface in the image.";
+const MASK_PREFIX = "material_mask_";
+const MASK_ROLE = (material)=>`MATERIAL MASK for "${material}": white pixels are exactly the surfaces that must be made of ${material}; black pixels are everything else. It is a selection, never an image to draw: the output must show no white or black mask shapes`;
+const MATERIAL_ID_LABELS = "Each region of material_id also carries its target material written on it as a short text label; read that label to know what the region is made of. The labels are metadata: never draw any text, letters or label boxes in the output.";
 const MATERIAL_ID_BAN = "MANDATORY MATERIAL ID COLOR BAN: the flat colors in the material_id images are arbitrary index labels, like the numbers on a paint-by-number sheet. They carry ZERO information about the real color, hue, tint, paint, stain, dye, lighting or mood of any surface. The same label colors may also show through as CAD display tints in rendered, shape_lock or other technical images; there too they are labels, never appearance. It is strictly forbidden to reproduce, echo, tint toward or be influenced by any ID color anywhere in the final image, including floors, walls, furniture, backgrounds, reflections and light. A purple ID region mapped to plywood must look like natural plywood, never purple wood; a red ID region mapped to oak must look like natural oak, never red. The color of every surface comes only from the real-world appearance of its mapped target material, the written instructions and any style reference.";
 const MATERIAL_ID_CHECK = "FINAL MATERIAL COLOR CHECK BEFORE OUTPUT: for every material region compare its final hue with its ID color. If they resemble each other and the mapped material would not naturally have that hue, the image is wrong: repaint that region in the natural color of its mapped material. No saturated ID color may survive in the output.";
 export function imageGuide(data, channels=channelsFor(data)) {
   const ids=channels.some(key=>key.startsWith("material_id"));
-  const lines=channels.map((key,index)=>`Image ${index+1} (${key}): ${key.startsWith(STYLE_PREFIX)?STYLE_ROLE:ROLES[key]||"additional visual reference; use only for the information visibly encoded in this image"}.`);
+  const lines=channels.map((key,index)=>`Image ${index+1} (${key}): ${key.startsWith(STYLE_PREFIX)?STYLE_ROLE:key.startsWith(MASK_PREFIX)?MASK_ROLE(data.prompts?.mask_materials?.[key]||"the material named in the mapping"):ROLES[key]||"additional visual reference; use only for the information visibly encoded in this image"}.`);
   if(channels.includes("scale_lock"))lines.unshift("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual object.");
-  if(ids)lines.unshift(MATERIAL_ID_BAN);
+  if(ids)lines.unshift(MATERIAL_ID_BAN+(data.prompts?.material_id_style==="labeled"?" "+MATERIAL_ID_LABELS:""));
   const scene=!channels.includes("reference");
   if(scene)lines.unshift(CAMERA_LOCK_START+(channels.includes("rendered")?"the rendered image":"the shape_lock image")+CAMERA_LOCK_END);
   if(channels.includes("reference"))lines.unshift("MANDATORY REFERENCE APPEARANCE LOCK: reference alone controls the complete frame's color or monochrome mode, white balance, exposure, brightness, contrast, tonal range, colors and background. Never average, blend or transfer appearance from scale_lock, placement, masks, depth, normals, edges, shape_lock or material_id; they are technical data only.");

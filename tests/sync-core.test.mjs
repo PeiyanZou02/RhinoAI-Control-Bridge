@@ -103,6 +103,10 @@ assert(imageGuide({...data,prompts:{color_materials:'#E63946 = glazed ceramic'}}
 assert(guide.includes('MANDATORY MATERIAL ID COLOR BAN')&&guide.includes('never purple wood')&&guide.includes('FINAL MATERIAL COLOR CHECK BEFORE OUTPUT')&&guide.includes('temporary CAD display colors'),'ID colors are banned as appearance whenever material_id is sent');
 assert(guide.indexOf('MANDATORY MATERIAL ID COLOR BAN')<guide.indexOf('Image 1 ('),'the ban comes before the image roles');
 assert(!imageGuide(data,['depth']).includes('MATERIAL ID COLOR BAN'));
+assert(imageGuide({...data,prompts:{color_materials:'#E63946 = glazed ceramic',material_id_style:'labeled'}},['material_id']).includes('carries its target material written on it')&&!imageGuide({...data,prompts:{color_materials:'#E63946 = glazed ceramic'}},['material_id']).includes('carries its target material'),'the label note follows the manifest style');
+const maskedData={...data,images:{rendered:'rhino_ai/m/rendered.png',material_mask_10:'rhino_ai/m/material_mask_10.png',material_mask_2:'rhino_ai/m/material_mask_2.png'},prompts:{mask_materials:{material_mask_2:'oak',material_mask_10:'glass'}}};
+assert.deepEqual(channelsFor(maskedData),['rendered','material_mask_2','material_mask_10']);
+assert(imageGuide(maskedData).includes('Image 2 (material_mask_2): MATERIAL MASK for "oak"')&&imageGuide(maskedData).includes('Image 3 (material_mask_10): MATERIAL MASK for "glass"'),'masks are ordered numerically and named');
 assert(imageGuide({...data,prompts:{color_materials:'#E63946 = glazed ceramic'}},['material_id']).includes('MATERIAL ASSIGNMENT RULE')&&!guide.includes('MATERIAL ASSIGNMENT RULE'),'the assignment rule follows the mapping and is absent without one');
 assert(guide.includes('MANDATORY CAMERA AND COMPOSITION LOCK')&&guide.includes('Use the rendered image as the base canvas')&&guide.includes('no base, plinth, pedestal')&&guide.includes('FINAL CAMERA CHECK BEFORE OUTPUT'),'scene mode locks the camera and frames the task as an edit');
 assert(guide.indexOf('CAMERA AND COMPOSITION LOCK')<guide.indexOf('MATERIAL ID COLOR BAN'),'the camera lock leads the guide');

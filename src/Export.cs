@@ -47,6 +47,10 @@ namespace RhinoAI
         // materials the objects use ("material"). Material rules reuse LayerRule: Id = material id or
         // "default", Index = a slot given once, so Index + 1 is the region key in both modes.
         public string MaterialIdSource="layer";
+        // "labeled": pastel ID colors with the material name written on each region; "flat": the raw colors.
+        public string MaterialIdStyle="labeled";
+        public bool MaterialMasks=false; // also send one white-on-black mask per material
+        public bool AiRetryOnLeak=true;  // AI render: measure the result against the ID colors and retry once
         public List<LayerRule> Materials=new List<LayerRule>();
         public bool ByMaterial(){return MaterialIdSource=="material";}
         public List<LayerRule> Rules(){return ByMaterial()?Materials:Layers;}
@@ -172,6 +176,9 @@ namespace RhinoAI
         public string Directory,Prompt,WearPrompt,PlacementConstraint;
         public Dictionary<string,string> Files;
         public List<string> Warnings;
+        public Dictionary<string,string> MaskMaterials=new Dictionary<string,string>(); // material_mask_N -> target material
+        // The region map the result is checked against.
+        public int[] Regions;public int RegionWidth,RegionHeight;public Dictionary<int,int> RegionColors;public Dictionary<int,string> RegionMaterials;
     }
     internal sealed class CanvasLayout
     {
@@ -341,14 +348,22 @@ namespace RhinoAI
             string dir=Path.Combine(config.Output,DateTime.Now.ToString("yyyyMMdd_HHmmss_fff")+"_"+Guid.NewGuid().ToString("N").Substring(0,6));
             var raster=new Raster(snapshot.Camera);int total=snapshot.Triangles.Count;
             for(int i=0;i<total;i++){raster.Draw(snapshot.Triangles[i]);if(i%2000==0 && progress!=null)progress(i*70/total);}
-            var visible=new HashSet<int>(raster.Layers.Where(x=>x>0));
+            var visible=new HashSet<int>(raster.Materials.Where(x=>x>0)); // region keys: layers or materials
             var visibleColors=snapshot.LayerColors.Where(x=>visible.Contains(x.Key)).ToList();
             if(visibleColors.Any(x=>x.Value==0))throw new InvalidOperationException("Material ID cannot use a pure black layer because black is the background. Change that Rhino layer color.");
             var duplicate=visibleColors.GroupBy(x=>x.Value).FirstOrDefault(g=>g.Count()>1);
             if(duplicate!=null)throw new InvalidOperationException("Several visible Rhino layers share the Material ID color "+Raster.Hex(duplicate.Key)+". Give these layers different colors, or click Assign contrast colors.");
-            var files=raster.Save(dir,snapshot.LayerColors);
+            bool labeled=config.MaterialIdStyle!="flat";var targets=new Dictionary<int,string>();foreach(var rule in config.Rules())targets[rule.Index+1]=rule.Material;
+            if(labeled)
+            {
+                var soft=new Dictionary<int,int>();var taken=new HashSet<int>();
+                foreach(var pair in snapshot.LayerColors){int color=Raster.Soft(pair.Value);while(taken.Contains(color))color=Raster.Darken(color);taken.Add(color);soft[pair.Key]=color;}
+                snapshot.LayerColors=soft;
+            }
+            var files=raster.Save(dir,snapshot.LayerColors,labeled?targets:null);
             if(snapshot.Rendered!=null&&snapshot.Rendered.Length>0){string rendered=Path.Combine(dir,"rendered.png");File.WriteAllBytes(rendered,snapshot.Rendered);files["rendered"]=rendered;}
-            var rules=config.Rules().Where(x=>visible.Contains(x.Index+1)).ToList();
+            // The mapping quotes the colors that are really in material_id, softened or not.
+            var rules=config.Rules().Where(x=>visible.Contains(x.Index+1)).Select(x=>new LayerRule{Id=x.Id,Index=x.Index,Name=x.Name,Material=x.Material,Description=x.Description,Color=snapshot.LayerColors.ContainsKey(x.Index+1)?Raster.Hex(snapshot.LayerColors[x.Index+1]):x.Color}).ToList();
             var share=raster.Materials.Where(x=>x>0).GroupBy(x=>x).ToDictionary(g=>g.Key,g=>g.Count()/(double)raster.Materials.Length);
             string prompt=MaterialRules.Prompt(rules,share,config.ByMaterial()?"material":"layer");
             string wear=null,placementConstraint=null;
@@ -363,7 +378,9 @@ namespace RhinoAI
             html.Append("<h2>Export notes</h2><pre>"+Escape(string.Join("\n",snapshot.Warnings))+"</pre>");
             File.WriteAllText(Path.Combine(dir,"preview.html"),html.ToString(),Encoding.UTF8);
             if(progress!=null)progress(100);
-            return new ExportResult{Directory=dir,Files=files,Prompt=prompt,WearPrompt=wear,PlacementConstraint=placementConstraint,Warnings=snapshot.Warnings};
+            var result=new ExportResult{Directory=dir,Files=files,Prompt=prompt,WearPrompt=wear,PlacementConstraint=placementConstraint,Warnings=snapshot.Warnings,Regions=raster.Materials,RegionWidth=snapshot.Camera.Width,RegionHeight=snapshot.Camera.Height,RegionColors=snapshot.LayerColors,RegionMaterials=targets};
+            foreach(var mask in raster.MaskRegions){string material;if(targets.TryGetValue(mask.Value,out material)&&!string.IsNullOrWhiteSpace(material))result.MaskMaterials[mask.Key]=material.Trim();}
+            return result;
         }
         static string Escape(string text){return System.Net.WebUtility.HtmlEncode(text??"");}
         static byte[] CaptureRendered(RhinoView view,Guid viewport,int width,int height,HashSet<Guid> selected)

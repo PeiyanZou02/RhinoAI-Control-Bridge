@@ -171,6 +171,10 @@ namespace RhinoAI
         public const string MaterialAssignment="MATERIAL ASSIGNMENT RULE: materials are assigned by region, never guessed from what an object usually is. For each line of the mapping, find the region of that named color in the material_id image, then give exactly those pixels the material written after the equals sign, and nothing else. Do not swap materials between regions, do not move a material to the object where it seems more typical, and do not give two regions the same look unless the mapping names the same material for both. The share of the frame given for each region tells you which region is which: the largest share is the largest surface in the image.";
         public const string MaterialIdBan="MANDATORY MATERIAL ID COLOR BAN: the flat colors in the material_id images are arbitrary index labels, like the numbers on a paint-by-number sheet. They carry ZERO information about the real color, hue, tint, paint, stain, dye, lighting or mood of any surface. The same label colors may also show through as CAD display tints in rendered, shape_lock or other technical images; there too they are labels, never appearance. It is strictly forbidden to reproduce, echo, tint toward or be influenced by any ID color anywhere in the final image, including floors, walls, furniture, backgrounds, reflections and light. A purple ID region mapped to plywood must look like natural plywood, never purple wood; a red ID region mapped to oak must look like natural oak, never red. The color of every surface comes only from the real-world appearance of its mapped target material, the written instructions and any style reference.";
         public const string MaterialIdCheck="FINAL MATERIAL COLOR CHECK BEFORE OUTPUT: for every material region compare its final hue with its ID color. If they resemble each other and the mapped material would not naturally have that hue, the image is wrong: repaint that region in the natural color of its mapped material. No saturated ID color may survive in the output.";
+        public const string MaskPrefix="material_mask_";
+        public static int MaskOrder(string key){int n;return int.TryParse(key.Substring(MaskPrefix.Length),out n)?n:int.MaxValue;}
+        public static string MaskRole(string material){return "MATERIAL MASK for \""+material+"\": white pixels are exactly the surfaces that must be made of "+material+"; black pixels are everything else. It is a selection, never an image to draw: the output must show no white or black mask shapes";}
+        public const string MaterialIdLabels="Each region of material_id also carries its target material written on it as a short text label; read that label to know what the region is made of. The labels are metadata: never draw any text, letters or label boxes in the output.";
         public static string Label(int index,string channel){return "Image "+(index+1)+" ("+channel+")";}
         // Images an engine receives, in prompt order. Background blend always sends its own fixed bundle.
         public static List<KeyValuePair<string,string>> Select(ExportResult export,Config config,int max,List<string> notes)
@@ -182,6 +186,7 @@ namespace RhinoAI
                 var wanted=config.AiChannels==null||config.AiChannels.Count==0?DefaultChannels:config.AiChannels.ToArray();
                 images=SceneChannels.Where(c=>wanted.Contains(c)&&export.Files.ContainsKey(c)).Select(c=>new KeyValuePair<string,string>(c,export.Files[c])).ToList();
             }
+            if(!config.ProductMode&&config.MaterialMasks&&export.MaskMaterials!=null)images.AddRange(export.MaskMaterials.Keys.OrderBy(MaskOrder).Where(export.Files.ContainsKey).Select(k=>new KeyValuePair<string,string>(k,export.Files[k])));
             if(images.Count==0)throw new InvalidOperationException("Tick at least one control image to send.");
             // Style references ride behind the control images and keep their place when the engine's limit is tight.
             var styles=export.Files.Where(x=>x.Key.StartsWith(StyleReferences.Prefix)).OrderBy(x=>x.Key).ToList();max=Math.Max(1,max-styles.Count);
@@ -196,10 +201,11 @@ namespace RhinoAI
             lines.Add("Use the supplied input images according to the exact roles below.");
             bool ids=channels.Any(c=>c.StartsWith("material_id")),scene=!channels.Contains("reference");
             if(scene)lines.Add(CameraLockStart+(channels.Contains("rendered")?"the rendered image":"the shape_lock image")+CameraLockEnd);
-            if(ids)lines.Add(MaterialIdBan);
+            if(ids)lines.Add(MaterialIdBan+(config.MaterialIdStyle!="flat"?" "+MaterialIdLabels:""));
             if(channels.Contains("reference"))lines.Add("MANDATORY REFERENCE APPEARANCE LOCK: reference alone controls the complete frame's color or monochrome mode, white balance, exposure, brightness, contrast, tonal range, colors and background. Never average, blend or transfer appearance from scale_lock, placement, masks, depth, normals, edges, shape_lock or material_id; they are technical data only.");
             if(channels.Contains("scale_lock"))lines.Add("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual object.");
-            for(int i=0;i<channels.Count;i++){string role;if(channels[i].StartsWith(StyleReferences.Prefix)){lines.Add(Label(i,channels[i])+": "+StyleReferences.Role+".");continue;}lines.Add(Label(i,channels[i])+": "+(Roles.TryGetValue(channels[i],out role)?role:"additional visual reference; use only for the information visibly encoded in this image")+".");}
+            for(int i=0;i<channels.Count;i++){string role;if(channels[i].StartsWith(StyleReferences.Prefix)){lines.Add(Label(i,channels[i])+": "+StyleReferences.Role+".");continue;}
+                if(channels[i].StartsWith(MaskPrefix)){string material;lines.Add(Label(i,channels[i])+": "+MaskRole(export.MaskMaterials!=null&&export.MaskMaterials.TryGetValue(channels[i],out material)?material:"the material named in the mapping")+".");continue;}lines.Add(Label(i,channels[i])+": "+(Roles.TryGetValue(channels[i],out role)?role:"additional visual reference; use only for the information visibly encoded in this image")+".");}
             if(channels.Contains("reference"))
             {
                 lines.Add("The reference image is the mandatory base canvas for the final output. Return an edited version of that same scene, keep its framing and background, and integrate the object at the placement shown; never return an isolated object on a new background.");
@@ -257,6 +263,62 @@ namespace RhinoAI
                 }
                 catch(Exception e){if(notes!=null)notes.Add("Style reference skipped: "+source+" ("+(e is FileNotFoundException||e is OutOfMemoryException?"missing or not a JPG, PNG or BMP image":e.Message)+")");}
             }
+        }
+    }
+    // Measures a result against the ID map: a region whose average hue matches its ID color, while its
+    // material would not naturally have that hue, is a leak.
+    public static class LeakCheck
+    {
+        public static List<string> Inspect(byte[] image,ExportResult export)
+        {
+            var found=new List<string>();
+            if(image==null||export==null||export.Regions==null||export.RegionColors==null||export.RegionWidth<1||export.RegionHeight<1)return found;
+            try
+            {
+                using(var memory=new MemoryStream(image))using(var bitmap=new System.Drawing.Bitmap(memory))
+                {
+                    int w=bitmap.Width,h=bitmap.Height,rw=export.RegionWidth,rh=export.RegionHeight;var sums=new Dictionary<int,double[]>();long total=0;
+                    var data=bitmap.LockBits(new System.Drawing.Rectangle(0,0,w,h),System.Drawing.Imaging.ImageLockMode.ReadOnly,System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                    try
+                    {
+                        var row=new byte[data.Stride];int step=Math.Max(1,w/640);
+                        for(int y=0;y<h;y+=step)
+                        {
+                            System.Runtime.InteropServices.Marshal.Copy(IntPtr.Add(data.Scan0,y*data.Stride),row,0,data.Stride);int ry=Math.Min(rh-1,(int)((long)y*rh/h));
+                            for(int x=0;x<w;x+=step){int region=export.Regions[ry*rw+Math.Min(rw-1,(int)((long)x*rw/w))];if(region==0)continue;double[] s;if(!sums.TryGetValue(region,out s))sums[region]=s=new double[4];s[0]+=row[x*3+2];s[1]+=row[x*3+1];s[2]+=row[x*3];s[3]++;total++;}
+                        }
+                    }
+                    finally{bitmap.UnlockBits(data);}
+                    foreach(var pair in sums.OrderByDescending(p=>p.Value[3]))
+                    {
+                        int idColor;string material;if(pair.Value[3]<total*0.005||!export.RegionColors.TryGetValue(pair.Key,out idColor))continue;
+                        if(export.RegionMaterials==null||!export.RegionMaterials.TryGetValue(pair.Key,out material))material="";
+                        double c=pair.Value[3];int mean=Raster.Rgb((int)(pair.Value[0]/c),(int)(pair.Value[1]/c),(int)(pair.Value[2]/c));
+                        double hm,sm,vm,hi,si,vi;Hsv(mean,out hm,out sm,out vm);Hsv(idColor,out hi,out si,out vi);
+                        double hueGap=Math.Abs(hm-hi);hueGap=Math.Min(hueGap,360-hueGap);
+                        if(sm>0.25&&si>0.3&&vm>0.2&&hueGap<28&&!Allows(material,Raster.ColorName(idColor)))found.Add("the \""+material+"\" region came out "+Raster.ColorName(mean)+", like its "+Raster.ColorName(idColor)+" ID color");
+                    }
+                }
+            }
+            catch(Exception){}
+            return found;
+        }
+        static readonly Dictionary<string,string[]> Synonyms=new Dictionary<string,string[]>{{"purple",new[]{"violet","lavender","lilac","mauve","plum"}},{"red",new[]{"crimson","scarlet","burgundy","maroon","brick"}},{"blue",new[]{"navy","azure","cobalt","indigo","denim"}},{"green",new[]{"olive","emerald","moss","sage","jade"}},{"yellow",new[]{"gold","lemon","mustard","brass"}},{"orange",new[]{"copper","amber","rust","terracotta"}},{"cyan",new[]{"turquoise","aqua","teal"}},{"magenta",new[]{"fuchsia","pink","rose"}},{"pink",new[]{"rose","blush","salmon","coral"}},{"brown",new[]{"walnut","oak","bronze","leather","wood","timber","chocolate","tan"}}};
+        // A material that is naturally that color, such as "red brick" on a red ID, is not a leak.
+        public static bool Allows(string material,string colorName)
+        {
+            string text=(material??"").ToLowerInvariant();
+            foreach(var word in (colorName??"").ToLowerInvariant().Split(' ','-'))
+            {
+                if(word.Length<3||word=="light")continue;if(text.Contains(word))return true;
+                string[] more;if(Synonyms.TryGetValue(word,out more)&&more.Any(text.Contains))return true;
+            }
+            return false;
+        }
+        static void Hsv(int rgb,out double h,out double s,out double v)
+        {
+            double r=((rgb>>16)&255)/255.0,g=((rgb>>8)&255)/255.0,b=(rgb&255)/255.0,max=Math.Max(r,Math.Max(g,b)),min=Math.Min(r,Math.Min(g,b)),delta=max-min;
+            v=max;s=max<=0?0:delta/max;h=delta<1e-6?0:max==r?60*(((g-b)/delta)%6):max==g?60*((b-r)/delta+2):60*((r-g)/delta+4);if(h<0)h+=360;
         }
     }
     // Direct vendor calls. The key goes only to the address shown in the panel, over the request header.
