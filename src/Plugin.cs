@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.37.1.0")]
+[assembly: System.Reflection.AssemblyVersion("0.37.2.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -34,9 +34,11 @@ namespace RhinoAI
         {
             if(window!=null&&!window.IsDisposed&&window.DocumentSerial!=doc.RuntimeSerialNumber){window.Close();window=null;}
             if(window==null||window.IsDisposed)window=new BridgeWindow(doc);
-            window.Show();window.BringToFront();return Result.Success;
+            // Owned by the Rhino main window: it stays above Rhino instead of hiding behind it and gets no taskbar button of its own.
+            if(!window.Visible)window.Show(new RhinoOwner());window.Activate();return Result.Success;
         }
     }
+    sealed class RhinoOwner : IWin32Window { public IntPtr Handle {get{return RhinoApp.MainWindowHandle();}} }
     public sealed class ExportCommand : Command
     {
         public override string EnglishName {get{return "Rhino2ComfyExport";}}
@@ -81,7 +83,7 @@ namespace RhinoAI
         {
             doc=document;config=Config.Load();if(doc!=null)config.Scan(doc);
             Theme.Scale=DeviceDpi/96f;mono=Theme.Mono();
-            Text="Rhino to Comfy";ClientSize=new Size(Theme.S(1000),Theme.S(720));MinimumSize=new Size(Theme.S(820),Theme.S(600));StartPosition=FormStartPosition.CenterScreen;
+            Text="Rhino to Comfy";ClientSize=new Size(Theme.S(1000),Theme.S(720));MinimumSize=new Size(Theme.S(820),Theme.S(600));StartPosition=FormStartPosition.CenterScreen;ShowInTaskbar=false;
             Font=Theme.Body();BackColor=Theme.Bg;ForeColor=Theme.Text;
             progress=new ThinProgress{Dock=DockStyle.Fill,Margin=Padding.Empty};connection=new StatusDot{Dock=DockStyle.Fill,Font=Theme.Body(),Margin=Padding.Empty};connection.Set(Theme.Faint,"Not connected");
 
