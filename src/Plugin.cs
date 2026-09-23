@@ -105,9 +105,9 @@ namespace RhinoAI
 
             var material=new TableLayoutPanel{ColumnCount=1,RowCount=3};material.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.Percent,100));
             idSource.Items.Add("Rhino layers");idSource.Items.Add("Rhino materials");idSource.SelectedIndex=config.ByMaterial()?1:0;
-            var sourceRow=new TableLayoutPanel{ColumnCount=2,AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,Theme.S(16))};sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,Theme.S(240)));
+            var sourceRow=new TableLayoutPanel{ColumnCount=2,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Anchor=AnchorStyles.Left|AnchorStyles.Top,Margin=new Padding(0,0,0,Theme.S(16))};sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             sourceRow.Controls.Add(new Label{Text="Material ID regions from",AutoSize=true,ForeColor=Theme.Muted,Font=Theme.Label(),Margin=new Padding(0,Theme.S(9),Theme.S(12),0)},0,0);
-            var sourceField=new Field(idSource,32){Dock=DockStyle.Fill,Margin=Padding.Empty};sourceRow.Controls.Add(sourceField,1,0);Tip(sourceRow,"Rhino layers: one ID color per layer, taken from the layer display color. Rhino materials: one ID color per render material the objects use, so parts on one layer with different materials stay separate.");
+            var sourceField=new Field(idSource,32){Width=Theme.S(240),Margin=Padding.Empty};sourceRow.Controls.Add(sourceField,1,0);Tip(sourceRow,"Rhino layers: one ID color per layer, taken from the layer display color. Rhino materials: one ID color per render material the objects use, so parts on one layer with different materials stay separate.");
             material.Controls.Add(sourceRow,0,0);
             idSource.SelectedIndexChanged+=(s,e)=>{ReadGrid(false);config.MaterialIdSource=idSource.SelectedIndex==1?"material":"layer";if(doc!=null)config.Scan(doc);FillLayers();};
             var materialActions=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,Theme.S(16))};
