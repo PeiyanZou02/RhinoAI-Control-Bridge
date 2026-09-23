@@ -35,10 +35,16 @@ namespace RhinoAI
             var google=new Vendor{Reply=r=>Json("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"done\"},{\"inlineData\":{\"mimeType\":\"image/png\",\"data\":\""+b64+"\"}}]}}]}")};
             var made=Wait(async()=>{using(var client=new AiClient(google))return await client.Generate(AiProviders.Find("google"),new ProviderSettings(),"g-key","make it real",inputs,1024,589,none);});
             var sent=JObject.Parse(google.Bodies[0]);
-            check(google.Requests[0].RequestUri.ToString()=="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent","Gemini default endpoint and model");
+            check(google.Requests[0].RequestUri.ToString()=="https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image:generateContent","Gemini default endpoint and model");
             check(google.Requests[0].Headers.GetValues("x-goog-api-key").Single()=="g-key"&&!google.Requests[0].RequestUri.ToString().Contains("g-key"),"Gemini key travels in the header, never the URL");
             check(sent.SelectTokens("contents[0].parts[*].inlineData").Count()==2&&(string)sent.SelectToken("contents[0].parts[0].text")=="make it real","Gemini receives the prompt and every control image");
-            check((string)sent.SelectToken("generationConfig.imageConfig.aspectRatio")=="16:9"&&sent.SelectToken("generationConfig.imageConfig.imageSize")==null,"Gemini aspect ratio follows the export, no size for 2.5");
+            check((string)sent.SelectToken("generationConfig.imageConfig.aspectRatio")=="16:9"&&(string)sent.SelectToken("generationConfig.imageConfig.imageSize")=="1K","Gemini aspect ratio and size follow the export");
+            var legacy=new Vendor{Reply=google.Reply};Wait(async()=>{using(var client=new AiClient(legacy))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-2.5-flash-image"},"k","p",inputs,1024,589,none);});
+            check(JObject.Parse(legacy.Bodies[0]).SelectToken("generationConfig.imageConfig.imageSize")==null,"no size for Gemini 2.5");
+            var lite=new Vendor{Reply=google.Reply};Wait(async()=>{using(var client=new AiClient(lite))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-3.1-flash-lite-image",Resolution="4K"},"k","p",inputs,4096,2304,none);});
+            check((string)JObject.Parse(lite.Bodies[0]).SelectToken("generationConfig.imageConfig.imageSize")=="1K"&&AiProviders.Resolutions(AiProviders.Find("google"),"gemini-3.1-flash-lite-image").SequenceEqual(new[]{"auto","1K"}),"Flash Lite is never asked for more than 1K");
+            var migrated=Newtonsoft.Json.JsonConvert.DeserializeObject<Config>("{\"SettingsVersion\":1,\"AiProviders\":{\"google\":{\"Model\":\"gemini-3-pro-image-preview\"}}}");migrated.Migrate();
+            check(migrated.AiProviders["google"].Model=="gemini-3-pro-image"&&migrated.SettingsVersion==2&&AiProviders.Find("google").Models[0]=="gemini-3-pro-image","the preview id moves to the GA model once");
             check(made.Count==1&&made[0].Bytes.SequenceEqual(pixels)&&made[0].Extension==".png","Gemini inline image decoded");
             var pro=new Vendor{Reply=google.Reply};
             Wait(async()=>{using(var client=new AiClient(pro))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-3-pro-image-preview",BaseUrl="https://proxy.example/v1beta/"},"k","p",inputs,2048,2048,none);});
@@ -47,7 +53,7 @@ namespace RhinoAI
             var sized=new Vendor{Reply=google.Reply};
             Wait(async()=>{using(var client=new AiClient(sized))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-3-pro-image-preview",Aspect="4:5",Resolution="4K"},"k","p",inputs,1024,589,none);});
             check((string)JObject.Parse(sized.Bodies[0]).SelectToken("generationConfig.imageConfig.aspectRatio")=="4:5"&&(string)JObject.Parse(sized.Bodies[0]).SelectToken("generationConfig.imageConfig.imageSize")=="4K","chosen Gemini aspect ratio and resolution are sent");
-            Wait(async()=>{using(var client=new AiClient(sized))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Resolution="4K"},"k","p",inputs,1024,589,none);});
+            Wait(async()=>{using(var client=new AiClient(sized))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-2.5-flash-image",Resolution="4K"},"k","p",inputs,1024,589,none);});
             check(JObject.Parse(sized.Bodies[1]).SelectToken("generationConfig.imageConfig.imageSize")==null,"a resolution the model cannot take is never sent");
             check(AiProviders.Resolutions(AiProviders.Find("google"),"gemini-2.5-flash-image").SequenceEqual(new[]{"auto"})&&AiProviders.Resolutions(AiProviders.Find("doubao"),"doubao-seedream-4-5-251128").SequenceEqual(new[]{"auto","2K","4K"})&&AiProviders.Aspects(AiProviders.Find("openai")).Length==4&&AiProviders.Aspects(AiProviders.Find(AiProviders.Comfy)).Length==0,"options follow the engine and model");
             check(AiProviders.PixelSize("2K",16/9.0)=="2731x1536"&&AiProviders.PixelSize("1K",1)=="1024x1024","pixel size keeps the resolution's area at any ratio");

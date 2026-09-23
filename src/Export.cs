@@ -78,7 +78,13 @@ namespace RhinoAI
         public static string PathName {get{return Path.Combine(Root,"settings.json");}}
         public static Config Load(){var config=File.Exists(PathName)?JsonConvert.DeserializeObject<Config>(File.ReadAllText(PathName,Encoding.UTF8)):new Config();config.Migrate();return config;}
         // Version 1: control images were soft at the old 1024 default, so saved settings still on it move to 2048 once.
-        public void Migrate(){if(SettingsVersion<1){if(LongEdge==1024)LongEdge=2048;SettingsVersion=1;}}
+        // Version 2: the Gemini 3 Pro Image preview id became gemini-3-pro-image.
+        public void Migrate()
+        {
+            if(SettingsVersion<1){if(LongEdge==1024)LongEdge=2048;}
+            if(SettingsVersion<2){ProviderSettings google;if(AiProviders.TryGetValue("google",out google)&&google.Model=="gemini-3-pro-image-preview")google.Model="gemini-3-pro-image";}
+            SettingsVersion=2;
+        }
         public void Save(){File.WriteAllText(PathName,JsonConvert.SerializeObject(this,Formatting.Indented),Encoding.UTF8);}
         public void Scan(RhinoDoc doc)
         {

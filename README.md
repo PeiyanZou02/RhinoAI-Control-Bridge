@@ -120,8 +120,9 @@ ComfyUI's image nodes are wrappers around vendor APIs. With your own API key, th
 
 | Engine | Aspect ratio | Resolution |
 | --- | --- | --- |
-| Gemini 3 image models | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9 | 1K, 2K, 4K |
-| Gemini 2.5 Flash Image | same ratios | fixed by the model |
+| `gemini-3-pro-image` (Nano Banana Pro, default) and `gemini-3.1-flash-image` (Nano Banana 2) | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9 | 1K, 2K, 4K |
+| `gemini-3.1-flash-lite-image` | same ratios | 1K |
+| `gemini-2.5-flash-image` (legacy, limited access) | same ratios | fixed by the model |
 | OpenAI GPT Image | 1:1, 3:2, 2:3 (fixed sizes) | quality: low, medium, high |
 | Doubao Seedream 4.0 / 4.5 | same ratios as Gemini, sent as a pixel size | 1K (4.0 only), 2K, 4K |
 

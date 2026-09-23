@@ -59,7 +59,7 @@ namespace RhinoAI
         public const string Comfy="comfyui";
         public static readonly AiProvider[] All=
         {
-            new AiProvider{Id="google",Name="Google Gemini (Nano Banana)",BaseUrl="https://generativelanguage.googleapis.com/v1beta",KeyVariable="GEMINI_API_KEY",Models=new[]{"gemini-2.5-flash-image","gemini-3-pro-image-preview"},MaxImages=14},
+            new AiProvider{Id="google",Name="Google Gemini (Nano Banana)",BaseUrl="https://generativelanguage.googleapis.com/v1beta",KeyVariable="GEMINI_API_KEY",Models=new[]{"gemini-3-pro-image","gemini-3.1-flash-image","gemini-3.1-flash-lite-image","gemini-3-pro-image-preview","gemini-2.5-flash-image"},MaxImages=14}, // Nano Banana Pro first: the studio-quality one
             new AiProvider{Id="openai",Name="OpenAI (GPT Image)",BaseUrl="https://api.openai.com/v1",KeyVariable="OPENAI_API_KEY",Models=new[]{"gpt-image-1","gpt-image-1-mini","gpt-image-1.5"},MaxImages=16},
             new AiProvider{Id="doubao",Name="Volcengine Doubao (Seedream)",BaseUrl="https://ark.cn-beijing.volces.com/api/v3",KeyVariable="ARK_API_KEY",Models=new[]{"doubao-seedream-4-0-250828","doubao-seedream-4-5-251128"},MaxImages=10},
             new AiProvider{Id=Comfy,Name="ComfyUI (queue the API workflow)",BaseUrl="",KeyVariable="",Models=new string[0],MaxImages=14}
@@ -75,7 +75,7 @@ namespace RhinoAI
         public static string[] Resolutions(AiProvider provider,string model)
         {
             model=(model??"").ToLowerInvariant();
-            if(provider.Id=="google")return model.Contains("gemini-3")?new[]{"auto","1K","2K","4K"}:new[]{"auto"}; // Gemini 2.5 image is fixed near 1K
+            if(provider.Id=="google")return model.Contains("lite")?new[]{"auto","1K"}:model.Contains("gemini-3")?new[]{"auto","1K","2K","4K"}:new[]{"auto"}; // Flash Lite draws 1K only; Gemini 2.5 image is fixed near 1K
             if(provider.Id=="openai")return new[]{"auto","low","medium","high"}; // GPT Image sizes are fixed; this is its quality level
             if(provider.Id=="doubao")return model.Contains("seedream-4-0")?new[]{"auto","1K","2K","4K"}:new[]{"auto","2K","4K"};
             return new string[0];
@@ -283,6 +283,8 @@ namespace RhinoAI
             Uri uri;if(!Uri.TryCreate(root,UriKind.Absolute,out uri)||(uri.Scheme!="https"&&!uri.IsLoopback))throw new ArgumentException("The API address must start with https://. If you pasted the key there, move it to API key and clear the address to restore the default.");
             string aspect=AiProviders.Pick(AiProviders.Aspects(provider),settings.Aspect),resolution=AiProviders.Pick(AiProviders.Resolutions(provider,model),settings.Resolution);
             if(resolution=="auto"&&provider.Id!="openai")resolution=Math.Max(width,height)<=1024?"1K":Math.Max(width,height)<=2048?"2K":"4K";
+            // Never ask for a size the model cannot draw: the largest it offers instead.
+            var sizes=AiProviders.Resolutions(provider,model).Where(x=>x!="auto").ToArray();if(resolution!="auto"&&sizes.Length>0&&!sizes.Contains(resolution))resolution=sizes.Last();
             HttpRequestMessage request;
             if(provider.Id=="google")
             {

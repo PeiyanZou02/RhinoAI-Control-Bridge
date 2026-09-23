@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.38.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.39.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -141,7 +141,7 @@ namespace RhinoAI
             foreach(var provider in AiProviders.All)engine.Items.Add(provider);
             Row(ai,"Engine",new Field(engine,32),"The tool that renders the ticked views. A vendor API renders directly, without ComfyUI. The ComfyUI engine queues the API workflow from Export settings.");
             Row(ai,"API key",new Field(apiKey,32),"Saved encrypted for your Windows account and sent only to the API address below. Leave empty to use the vendor's environment variable, such as GEMINI_API_KEY.");
-            Row(ai,"Model",new Field(model,32),"Pick a suggestion or type any image model the vendor offers.");
+            Row(ai,"Model",new Field(model,32),"Pick a suggestion or type any image model the vendor offers. Gemini: gemini-3-pro-image (Nano Banana Pro) for the best quality and 4K; gemini-3.1-flash-image (Nano Banana 2) is faster and cheaper.");
             Row(ai,"Aspect ratio",new Field(aspect,32),"auto follows the exported frame. The list shows what the chosen engine accepts.");
             Row(ai,"Resolution",new Field(resolution,32),"Output size. The choices follow the engine and model: Gemini 3 and Seedream take 1K, 2K or 4K, Gemini 2.5 is fixed, and GPT Image takes a quality level instead. auto follows Longest edge on the Export settings page.");
             model.TextChanged+=(s,e)=>FillOptions(false);

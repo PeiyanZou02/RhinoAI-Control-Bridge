@@ -120,8 +120,9 @@ ComfyUI 的生图节点本质上是对厂商 API 的封装。只要有自己的 
 
 | 引擎 | 画幅比例 | 分辨率 |
 | --- | --- | --- |
-| Gemini 3 图像模型 | 1:1、2:3、3:2、3:4、4:3、4:5、5:4、9:16、16:9、21:9 | 1K、2K、4K |
-| Gemini 2.5 Flash Image | 同上 | 由模型固定 |
+| `gemini-3-pro-image`（Nano Banana Pro，默认）和 `gemini-3.1-flash-image`（Nano Banana 2） | 1:1、2:3、3:2、3:4、4:3、4:5、5:4、9:16、16:9、21:9 | 1K、2K、4K |
+| `gemini-3.1-flash-lite-image` | 同上 | 1K |
+| `gemini-2.5-flash-image`（旧版，限量访问） | 同上 | 由模型固定 |
 | OpenAI GPT Image | 1:1、3:2、2:3（固定尺寸） | 质量：low、medium、high |
 | 豆包 Seedream 4.0 / 4.5 | 与 Gemini 相同，按像素尺寸发送 | 1K（仅 4.0）、2K、4K |
 
