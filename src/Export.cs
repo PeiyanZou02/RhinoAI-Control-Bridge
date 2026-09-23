@@ -45,23 +45,27 @@ namespace RhinoAI
         public List<LayerRule> Layers=new List<LayerRule>();
         // Material ID regions come from Rhino layers ("layer", one color per layer) or from the render
         // materials the objects use ("material"). Material rules reuse LayerRule: Id = material id or
-        // "default", Index = Rhino material index + 1, so Index + 1 is the region key in both modes.
+        // "default", Index = a slot given once, so Index + 1 is the region key in both modes.
         public string MaterialIdSource="layer";
         public List<LayerRule> Materials=new List<LayerRule>();
         public bool ByMaterial(){return MaterialIdSource=="material";}
         public List<LayerRule> Rules(){return ByMaterial()?Materials:Layers;}
         public LayerRule MaterialRule(Material mat)
         {
-            bool none=mat==null||mat.MaterialIndex<0;string id=none?"default":mat.Id.ToString(),name=none?"Default material":string.IsNullOrWhiteSpace(mat.Name)?"Material "+mat.MaterialIndex:mat.Name;
+            // Rhino hands each object its own compatibility copy of a render material, with a fresh Id and
+            // table index, so the render material instance is the identity; the table Id only for plain materials.
+            bool none=mat==null||(mat.RenderMaterialInstanceId==Guid.Empty&&mat.MaterialIndex<0&&string.IsNullOrWhiteSpace(mat.Name));
+            string id=none?"default":mat.RenderMaterialInstanceId!=Guid.Empty?"render:"+mat.RenderMaterialInstanceId:mat.MaterialIndex>=0?mat.Id.ToString():"name:"+mat.Name.Trim();
+            string name=none?"Default material":string.IsNullOrWhiteSpace(mat.Name)?"Material "+mat.MaterialIndex:mat.Name;
             var rule=Materials.FirstOrDefault(m=>m.Id==id);
             if(rule==null)
             {
-                rule=MaterialRules.Guess(id,0,name);
+                rule=MaterialRules.Guess(id,Materials.Count==0?0:Materials.Max(m=>m.Index)+1,name); // a slot that never changes, so one material is one region
                 // The first palette color no other material uses, so new materials never collide.
                 for(int slot=1;;slot++){string color=Raster.Hex(Raster.Palette(slot));if(Materials.All(m=>!string.Equals(m.Color,color,StringComparison.OrdinalIgnoreCase))){rule.Color=color;break;}}
                 Materials.Add(rule);
             }
-            rule.Index=none?0:mat.MaterialIndex+1;rule.Name=name;return rule;
+            rule.Name=name;return rule;
         }
         // AI render page. Lists start null because Json.NET appends saved items to a non-empty default.
         public string AiEngine="google";
