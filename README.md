@@ -120,8 +120,9 @@ ComfyUI's image nodes are wrappers around vendor APIs. With your own API key, th
 
 | Engine | Aspect ratio | Resolution |
 | --- | --- | --- |
-| Gemini 3 image models | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9 | 1K, 2K, 4K |
-| Gemini 2.5 Flash Image | same ratios | fixed by the model |
+| `gemini-3-pro-image` (Nano Banana Pro, default) and `gemini-3.1-flash-image` (Nano Banana 2) | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9 | 1K, 2K, 4K |
+| `gemini-3.1-flash-lite-image` | same ratios | 1K |
+| `gemini-2.5-flash-image` (legacy, limited access) | same ratios | fixed by the model |
 | OpenAI GPT Image | 1:1, 3:2, 2:3 (fixed sizes) | quality: low, medium, high |
 | Doubao Seedream 4.0 / 4.5 | same ratios as Gemini, sent as a pixel size | 1K (4.0 only), 2K, 4K |
 
@@ -200,7 +201,17 @@ For strict compositing, use `inpaint_mask.png` with a workflow that composites g
 
 All raster controls from a single export share the same base camera and perspective. Portrait output and detail controls use cropped camera sub-frustums derived from the same view, without changing the camera location or lens.
 
-Material IDs follow the Rhino layer display colors exactly, on a black background. The same HEX values are written into the material mapping prompt. Use **Assign contrast colors** in the plug-in when adjacent parts are hard to distinguish. Visible layers must use unique, non-black colors so their regions remain unambiguous.
+**Material ID regions from** on the Layer materials page chooses what a region is. **Rhino layers** (default) gives every layer one color, taken from its display color. **Rhino materials** gives every render material the objects use one color, resolved the way Rhino shows it (by object, by layer or by parent block), so parts that share a layer but carry different materials stay separate. Each mode keeps its own table of target materials and ID colors; material colors are assigned from the plug-in palette and never change the Rhino materials. **Create layer materials** applies to layer regions only.
+
+### Keeping ID colors out of the render
+
+Image models read a saturated flat color as paint, so a purple ID region tends to come back as purple wood. Three measures, all on by default or one click away:
+
+- **Write the material name on each region and soften the ID colors** (Layer materials page, default on). `material_id` uses pastel versions of the ID colors, same hue at low saturation, and the target material is written on every region large enough to hold a label. The model reads a name far more reliably than a hex code; the mapping quotes the softened colors. Turn it off to export the raw flat colors.
+- **Also send one mask per material** (default off): `material_mask_1`, `material_mask_2`, … in order of size, up to 12, each white where that material must appear. A mask has no hue to leak. They follow the control images in AI render and in Update to ComfyUI, one image per material.
+- **Check the result for ID color leaks and retry once** (AI render page, default on): after each render the average color of every region is compared with its ID color. A region that came back in its ID hue, while its material name does not call for that hue, is logged, the image is kept as `<view>_<time>_rejected.png`, and one corrected attempt is sent. "Red brick" on a red ID is not a leak.
+
+In layer mode, Material IDs follow the Rhino layer display colors exactly, on a black background. The same HEX values are written into the material mapping prompt. Use **Assign contrast colors** in the plug-in when adjacent parts are hard to distinguish. Visible layers must use unique, non-black colors so their regions remain unambiguous.
 
 ## Build and test
 

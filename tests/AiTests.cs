@@ -35,10 +35,16 @@ namespace RhinoAI
             var google=new Vendor{Reply=r=>Json("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"done\"},{\"inlineData\":{\"mimeType\":\"image/png\",\"data\":\""+b64+"\"}}]}}]}")};
             var made=Wait(async()=>{using(var client=new AiClient(google))return await client.Generate(AiProviders.Find("google"),new ProviderSettings(),"g-key","make it real",inputs,1024,589,none);});
             var sent=JObject.Parse(google.Bodies[0]);
-            check(google.Requests[0].RequestUri.ToString()=="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent","Gemini default endpoint and model");
+            check(google.Requests[0].RequestUri.ToString()=="https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image:generateContent","Gemini default endpoint and model");
             check(google.Requests[0].Headers.GetValues("x-goog-api-key").Single()=="g-key"&&!google.Requests[0].RequestUri.ToString().Contains("g-key"),"Gemini key travels in the header, never the URL");
             check(sent.SelectTokens("contents[0].parts[*].inlineData").Count()==2&&(string)sent.SelectToken("contents[0].parts[0].text")=="make it real","Gemini receives the prompt and every control image");
-            check((string)sent.SelectToken("generationConfig.imageConfig.aspectRatio")=="16:9"&&sent.SelectToken("generationConfig.imageConfig.imageSize")==null,"Gemini aspect ratio follows the export, no size for 2.5");
+            check((string)sent.SelectToken("generationConfig.imageConfig.aspectRatio")=="16:9"&&(string)sent.SelectToken("generationConfig.imageConfig.imageSize")=="1K","Gemini aspect ratio and size follow the export");
+            var legacy=new Vendor{Reply=google.Reply};Wait(async()=>{using(var client=new AiClient(legacy))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-2.5-flash-image"},"k","p",inputs,1024,589,none);});
+            check(JObject.Parse(legacy.Bodies[0]).SelectToken("generationConfig.imageConfig.imageSize")==null,"no size for Gemini 2.5");
+            var lite=new Vendor{Reply=google.Reply};Wait(async()=>{using(var client=new AiClient(lite))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-3.1-flash-lite-image",Resolution="4K"},"k","p",inputs,4096,2304,none);});
+            check((string)JObject.Parse(lite.Bodies[0]).SelectToken("generationConfig.imageConfig.imageSize")=="1K"&&AiProviders.Resolutions(AiProviders.Find("google"),"gemini-3.1-flash-lite-image").SequenceEqual(new[]{"auto","1K"}),"Flash Lite is never asked for more than 1K");
+            var migrated=Newtonsoft.Json.JsonConvert.DeserializeObject<Config>("{\"SettingsVersion\":1,\"AiProviders\":{\"google\":{\"Model\":\"gemini-3-pro-image-preview\"}}}");migrated.Migrate();
+            check(migrated.AiProviders["google"].Model=="gemini-3-pro-image"&&migrated.SettingsVersion==2&&AiProviders.Find("google").Models[0]=="gemini-3-pro-image","the preview id moves to the GA model once");
             check(made.Count==1&&made[0].Bytes.SequenceEqual(pixels)&&made[0].Extension==".png","Gemini inline image decoded");
             var pro=new Vendor{Reply=google.Reply};
             Wait(async()=>{using(var client=new AiClient(pro))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-3-pro-image-preview",BaseUrl="https://proxy.example/v1beta/"},"k","p",inputs,2048,2048,none);});
@@ -47,7 +53,7 @@ namespace RhinoAI
             var sized=new Vendor{Reply=google.Reply};
             Wait(async()=>{using(var client=new AiClient(sized))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-3-pro-image-preview",Aspect="4:5",Resolution="4K"},"k","p",inputs,1024,589,none);});
             check((string)JObject.Parse(sized.Bodies[0]).SelectToken("generationConfig.imageConfig.aspectRatio")=="4:5"&&(string)JObject.Parse(sized.Bodies[0]).SelectToken("generationConfig.imageConfig.imageSize")=="4K","chosen Gemini aspect ratio and resolution are sent");
-            Wait(async()=>{using(var client=new AiClient(sized))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Resolution="4K"},"k","p",inputs,1024,589,none);});
+            Wait(async()=>{using(var client=new AiClient(sized))return await client.Generate(AiProviders.Find("google"),new ProviderSettings{Model="gemini-2.5-flash-image",Resolution="4K"},"k","p",inputs,1024,589,none);});
             check(JObject.Parse(sized.Bodies[1]).SelectToken("generationConfig.imageConfig.imageSize")==null,"a resolution the model cannot take is never sent");
             check(AiProviders.Resolutions(AiProviders.Find("google"),"gemini-2.5-flash-image").SequenceEqual(new[]{"auto"})&&AiProviders.Resolutions(AiProviders.Find("doubao"),"doubao-seedream-4-5-251128").SequenceEqual(new[]{"auto","2K","4K"})&&AiProviders.Aspects(AiProviders.Find("openai")).Length==4&&AiProviders.Aspects(AiProviders.Find(AiProviders.Comfy)).Length==0,"options follow the engine and model");
             check(AiProviders.PixelSize("2K",16/9.0)=="2731x1536"&&AiProviders.PixelSize("1K",1)=="1024x1024","pixel size keeps the resolution's area at any ratio");
@@ -100,6 +106,25 @@ namespace RhinoAI
             var legend=new List<LayerRule>{new LayerRule{Index=0,Name="wood",Color="#ff1744",Material="dark plywood"},new LayerRule{Index=3,Name="playwood",Color="#651FFF",Material="model plywood"},new LayerRule{Index=4,Name="concrete \"floor\"",Color="#00E676",Material="concrete floor"},new LayerRule{Index=5,Name="unused",Color="#FFFFFF",Material=" "}};
             string mapping=MaterialRules.Prompt(legend,new Dictionary<int,double>{{1,0.184},{4,0.62},{5,0.004}});
             check(mapping.Split('\n').Length==3&&mapping.StartsWith("#651FFF — the VIOLET-PURPLE region, about 62% of the frame, Rhino layer \"playwood\" = model plywood")&&mapping.Contains("#FF1744 — the RED region, about 18% of the frame, Rhino layer \"wood\" = dark plywood")&&mapping.Contains("the GREEN region, under 1% of the frame, Rhino layer \"concrete 'floor'\" = concrete floor"),"mapping names each color, its share and layer, largest region first");
+            check(MaterialRules.Prompt(legend,null,"material").Contains("Rhino material \"wood\" = dark plywood")&&!MaterialRules.Prompt(legend,null,"material").Contains("Rhino layer"),"the mapping names materials when regions come from materials");
+            var byMaterial=new Config{MaterialIdSource="material"};check(byMaterial.ByMaterial()&&ReferenceEquals(byMaterial.Rules(),byMaterial.Materials)&&!new Config().ByMaterial()&&ReferenceEquals(new Config().Rules(),new Config().Layers)==false,"the Material ID source picks the rule list");
+            var guessed=MaterialRules.Guess("m1",3,"Brushed Steel");check(guessed.Id=="m1"&&guessed.Index==3&&guessed.Material=="satin silver metal","a material rule guesses its target from the material name");
+            check(MaterialRules.TargetFromName("KVANT / Ivory_enamel")=="ivory enamel"&&MaterialRules.TargetFromName("Site::Walls::Brick-red")=="brick red"&&MaterialRules.TargetFromName("  ")=="neutral matte material","Rhino names become readable target materials");
+            int soft=Raster.Soft(0x651FFF);check(soft!=0&&Raster.ColorName(soft).EndsWith("violet-purple")&&Raster.Soft(0x000000)!=0&&Raster.Soft(0xFF1744)!=Raster.Soft(0x651FFF),"softened ID colors keep their hue and never turn black");
+            check(guide.Contains("carries its target material written on it")&&!PromptGuide.Build(chosen.Select(x=>x.Key).ToList(),export,new Config{AiPrompt="x",AiChannels=config.AiChannels,MaterialIdStyle="flat"}).Contains("carries its target material"),"the label note follows the material_id style");
+            var masked=new ExportResult{Directory=root,Files=new Dictionary<string,string>{{"rendered",png},{"material_mask_1",png},{"material_mask_2",png}},MaskMaterials=new Dictionary<string,string>{{"material_mask_2","oak"},{"material_mask_1","brushed titanium"}}};
+            var maskChannels=PromptGuide.Select(masked,new Config{MaterialMasks=true,AiChannels=new List<string>{"rendered"}},14,null).Select(x=>x.Key).ToList();
+            check(maskChannels.SequenceEqual(new[]{"rendered","material_mask_1","material_mask_2"})&&PromptGuide.Build(maskChannels,masked,new Config{MaterialMasks=true}).Contains("Image 2 (material_mask_1): MATERIAL MASK for \"brushed titanium\""),"masks follow the controls in order and name their material");
+            check(PromptGuide.Select(masked,new Config{MaterialMasks=false,AiChannels=new List<string>{"rendered"}},14,null).Count==1,"masks are sent only when asked for");
+            var checkedExport=new ExportResult{Regions=Enumerable.Range(0,64).Select(i=>i%8<4?1:2).ToArray(),RegionWidth=8,RegionHeight=8,RegionColors=new Dictionary<int,int>{{1,0x651FFF},{2,0xFF1744}},RegionMaterials=new Dictionary<int,string>{{1,"model plywood"},{2,"red brick"}}};
+            using(var result=new System.Drawing.Bitmap(64,64))using(var canvas=System.Drawing.Graphics.FromImage(result))using(var memory=new MemoryStream())
+            {
+                canvas.FillRectangle(new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(0x9B,0x7F,0xE0)),0,0,32,64);canvas.FillRectangle(System.Drawing.Brushes.Firebrick,32,0,32,64);result.Save(memory,System.Drawing.Imaging.ImageFormat.Png);
+                var leaks=LeakCheck.Inspect(memory.ToArray(),checkedExport);
+                check(leaks.Count==1&&leaks[0].Contains("model plywood")&&!leaks[0].Contains("brick"),"a purple plywood region is a leak, a red brick region is not");
+                var natural=new System.Drawing.Bitmap(64,64);using(var g=System.Drawing.Graphics.FromImage(natural)){g.Clear(System.Drawing.Color.BurlyWood);}using(var m2=new MemoryStream()){natural.Save(m2,System.Drawing.Imaging.ImageFormat.Png);check(LeakCheck.Inspect(m2.ToArray(),checkedExport).Count==0,"natural wood tones pass the check");}
+            }
+            check(LeakCheck.Allows("lavender velvet","violet-purple")&&!LeakCheck.Allows("birch plywood","violet-purple")&&LeakCheck.Allows("walnut","brown"),"color words and synonyms in the material name allow that hue");
             check(Raster.ColorName(0x00E5FF)=="cyan"&&Raster.ColorName(0xFFEA00)=="yellow"&&Raster.ColorName(0xFF6D00)=="orange"&&Raster.ColorName(0x2979FF)=="blue"&&Raster.ColorName(0xF500FF)=="magenta"&&Raster.ColorName(0x76FF03)=="lime green"&&Raster.ColorName(0xFF4081)=="pink"&&Raster.ColorName(0x00BFA5)=="teal"&&Raster.ColorName(0xC6A0FF)=="light violet-purple"&&Raster.ColorName(0xFFFFFF)=="white"&&Raster.ColorName(0x8B4513)=="brown"&&Raster.ColorName(0x808080)=="grey","every palette color gets a plain name");
             check(!PromptGuide.Build(new List<string>{"rendered"},export,config).Contains("MATERIAL ID COLOR BAN"),"no ID color rule when material_id is not sent");
             check(!PromptGuide.Build(new List<string>{"rendered"},export,config).Contains("#FF0000"),"material mapping is left out when material_id is not sent");
@@ -145,6 +170,9 @@ namespace RhinoAI
                 int run=0,widest=0,dark=0,outside=0;
                 for(int x=0;x<64;x++){if(edges.GetPixel(x,32).R>0){run++;widest=Math.Max(widest,run);}else run=0;if(shape.GetPixel(x,32).R<0x40)dark++;if(edges.GetPixel(x,32).R>0&&mask.GetPixel(x,32).R==0)outside++;}
                 check(widest==1&&dark==2,"edges and shape_lock outlines are one pixel wide at 64 px");
+            check(maps.ContainsKey("material_mask_1")&&raster.MaskRegions["material_mask_1"]==1,"a mask per material region is written");
+            var labeledMaps=raster.Save(Path.Combine(root,"raster-labeled"),new Dictionary<int,int>{{1,Raster.Soft(0xff0000)}},new Dictionary<int,string>{{1,"oak"}});
+            using(var labeledImage=new System.Drawing.Bitmap(labeledMaps["material_id"]))check(Enumerable.Range(0,64).Any(x=>labeledImage.GetPixel(x,32).ToArgb()==System.Drawing.Color.White.ToArgb()||labeledImage.GetPixel(x,32).ToArgb()==System.Drawing.Color.Black.ToArgb()),"the material name is drawn on its region");
                 check(outside==0,"outline pixels stay on the object, so the silhouette is not enlarged");
             }
             check(Raster.LineWeight(1024,589)==1&&Raster.LineWeight(2048,1178)==1&&Raster.LineWeight(4096,2356)==3,"line weight grows only at very large sizes");

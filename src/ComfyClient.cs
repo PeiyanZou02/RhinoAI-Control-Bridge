@@ -50,7 +50,7 @@ namespace RhinoAI
         public static string DescribeStatus(JObject status,string target)
         {
             if(status==null)return "The ComfyUI window has not loaded the sync extension";
-            if(((int?)status["version"]??0)<27)return "The ComfyUI sync extension is outdated: run install-comfy-extension.ps1 again, then press F5 in ComfyUI";
+            if(((int?)status["version"]??0)<28)return "The ComfyUI sync extension is outdated: run install-comfy-extension.ps1 again, then press F5 in ComfyUI";
             string active=(string)status["active"],state=(string)status["state"];
             string where=string.IsNullOrEmpty(active)?"ComfyUI shows an unsaved workflow":"ComfyUI shows "+active;
             if(state=="error")return where+" · sync failed: "+(string)status["message"];
@@ -125,7 +125,7 @@ namespace RhinoAI
             // Also provide a drag-and-drop UI workflow for inspecting all uploaded channels.
             File.WriteAllText(Path.Combine(export.Directory,"comfy_preview.workflow.json"),PreviewUi(uploaded).ToString(),Encoding.UTF8);
             string userPrompt=config.ProductMode?(config.WearInstructions??"").Trim():"";
-            var manifest=new JObject{["schema"]="rhino-ai-live/1",["revision"]=Guid.NewGuid().ToString("N"),["images"]=JObject.FromObject(uploaded),["prompts"]=new JObject{["color_materials"]=export.Prompt??"",["user_prompt"]=userPrompt,["placement_constraint"]=export.PlacementConstraint??""},["input_profile"]=config.ProductMode?(config.DetailPriority?"detail_priority":"full_frame"):"scene"};
+            var manifest=new JObject{["schema"]="rhino-ai-live/1",["revision"]=Guid.NewGuid().ToString("N"),["images"]=JObject.FromObject(uploaded),["prompts"]=new JObject{["color_materials"]=export.Prompt??"",["user_prompt"]=userPrompt,["placement_constraint"]=export.PlacementConstraint??"",["mask_materials"]=JObject.FromObject(export.MaskMaterials??new Dictionary<string,string>()),["material_id_style"]=config.MaterialIdStyle??"labeled"},["input_profile"]=config.ProductMode?(config.DetailPriority?"detail_priority":"full_frame"):"scene"};
             // An empty target follows whichever workflow the ComfyUI window shows. A new request id per
             // publish lets the window switch once, without fighting the user afterwards.
             if(!string.IsNullOrWhiteSpace(config.TargetWorkflow))
@@ -185,6 +185,7 @@ namespace RhinoAI
             string[] detail={"reference","placement","scale_lock","shape_lock_detail","material_id_detail","normal_detail","edges_detail","depth_detail","object_mask","inpaint_mask","occlusion_mask"};
             var order=config.ProductMode?(config.DetailPriority&&files.ContainsKey("shape_lock_detail")?detail:full):scene;
             var selected=new Dictionary<string,string>();foreach(var key in order)if(files.ContainsKey(key))selected[key]=files[key];
+            if(!config.ProductMode&&config.MaterialMasks)foreach(var mask in files.Keys.Where(k=>k.StartsWith(PromptGuide.MaskPrefix)).OrderBy(PromptGuide.MaskOrder))if(selected.Count<14)selected[mask]=files[mask];
             if(selected.Count==0)foreach(var file in files.Take(14))selected[file.Key]=file.Value;
             if(selected.Count>14)throw new InvalidOperationException("More than 14 images selected. Multi-image models such as Nano Banana accept at most 14.");
             // Style photos travel behind the controls, in the slots that are left.
