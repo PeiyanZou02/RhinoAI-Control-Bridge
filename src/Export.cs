@@ -122,6 +122,13 @@ namespace RhinoAI
             return new LayerRule{Id=id,Index=index,Name=fullPath,Color="",Material=mat,Description=desc};
         }
         static bool Has(string name,params string[] keys){return keys.Any(name.Contains);}
+        // "KVANT / Ivory_enamel" -> "ivory enamel"; "Site::Walls::Brick" -> "brick". A readable material word for the prompt.
+        public static string TargetFromName(string name)
+        {
+            string last=(name??"").Split(new[]{"::","/","\\",">"},StringSplitOptions.RemoveEmptyEntries).LastOrDefault()??"";
+            string words=System.Text.RegularExpressions.Regex.Replace(last.Replace('_',' ').Replace('-',' ').Replace('.',' '),@"\s+"," ").Trim();
+            return words==""?"neutral matte material":words.ToLowerInvariant();
+        }
         public static string Prompt(IEnumerable<LayerRule> layers,string style){return Prompt(layers,null as IDictionary<int,double>);}
         // One line per visible layer, largest region first: hex, color name, share of the frame, layer name, material.
         public static string Prompt(IEnumerable<LayerRule> layers,IDictionary<int,double> share){return Prompt(layers,share,"layer");}

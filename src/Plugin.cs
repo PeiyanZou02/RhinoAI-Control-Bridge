@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.37.2.0")]
+[assembly: System.Reflection.AssemblyVersion("0.38.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -115,6 +115,7 @@ namespace RhinoAI
             var materialActions=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,Theme.S(16))};
             materialActions.Controls.Add(Tip(Button("Reload from Rhino",delegate{Read();config.Scan(doc);FillLayers();}),"Reads the layers, materials and colors from Rhino again."));
             materialActions.Controls.Add(Tip(Button("Assign contrast colors",AssignHighContrastColors),"Gives every row a distinct Material ID color. For layers this changes the layer display color, with undo; for materials only the export color changes."));
+            materialActions.Controls.Add(Tip(Button("Names as targets",delegate{ReadGrid(false);foreach(var rule in config.Rules())rule.Material=MaterialRules.TargetFromName(rule.Name);FillLayers();config.Save();Log("Target materials filled from the "+(config.ByMaterial()?"material":"layer")+" names. Edit any row that needs a fuller description.");}),"Writes every Rhino name into Target material, cleaned up: library prefixes and parent layers dropped, underscores to spaces. Replaces what is there."));
             createMaterials=Button("Create layer materials",delegate{Read();ApplyMaterials();});materialActions.Controls.Add(Tip(createMaterials,"Creates basic Rhino materials from the target materials in the table. Undo is supported. Only for layer regions."));
             material.Controls.Add(materialActions,0,1);
             layers.Dock=DockStyle.Fill;layers.AllowUserToAddRows=false;layers.AllowUserToDeleteRows=false;layers.AllowUserToResizeRows=false;layers.RowHeadersVisible=false;layers.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;Theme.Style(layers);
