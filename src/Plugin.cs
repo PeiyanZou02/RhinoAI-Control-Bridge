@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.36.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.37.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -64,6 +64,8 @@ namespace RhinoAI
         AiProvider shown;
         readonly AutoSyncWatcher watcher;
         readonly DataGridView layers=new DataGridView();
+        readonly ComboBox idSource=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};
+        FlatButton createMaterials;
         readonly TextBox log=new TextBox();
         readonly FlowLayoutPanel actions=new FlowLayoutPanel(),aiActions=new FlowLayoutPanel();
         readonly Label targetStatus=new Label();
@@ -101,16 +103,22 @@ namespace RhinoAI
             targetStatus.AutoSize=true;targetStatus.ForeColor=Theme.Muted;targetStatus.Font=Theme.Small();targetStatus.Margin=new Padding(0,Theme.S(8),0,Theme.S(24));targetStatus.Text=" ";Add(sync,targetStatus);
             Add(sync,selected);Add(sync,autoSync);Add(sync,syncStyle);
 
-            var material=new TableLayoutPanel{ColumnCount=1,RowCount=2};material.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            var material=new TableLayoutPanel{ColumnCount=1,RowCount=3};material.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.AutoSize));material.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            idSource.Items.Add("Rhino layers");idSource.Items.Add("Rhino materials");idSource.SelectedIndex=config.ByMaterial()?1:0;
+            var sourceRow=new TableLayoutPanel{ColumnCount=2,AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,Theme.S(16))};sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,Theme.S(240)));
+            sourceRow.Controls.Add(new Label{Text="Material ID regions from",AutoSize=true,ForeColor=Theme.Muted,Font=Theme.Label(),Margin=new Padding(0,Theme.S(9),Theme.S(12),0)},0,0);
+            var sourceField=new Field(idSource,32){Dock=DockStyle.Fill,Margin=Padding.Empty};sourceRow.Controls.Add(sourceField,1,0);Tip(sourceRow,"Rhino layers: one ID color per layer, taken from the layer display color. Rhino materials: one ID color per render material the objects use, so parts on one layer with different materials stay separate.");
+            material.Controls.Add(sourceRow,0,0);
+            idSource.SelectedIndexChanged+=(s,e)=>{ReadGrid(false);config.MaterialIdSource=idSource.SelectedIndex==1?"material":"layer";if(doc!=null)config.Scan(doc);FillLayers();};
             var materialActions=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,Theme.S(16))};
-            materialActions.Controls.Add(Tip(Button("Reload layers",delegate{Read();config.Scan(doc);FillLayers();}),"Reads layers and colors from Rhino again."));
-            materialActions.Controls.Add(Tip(Button("Assign contrast colors",AssignHighContrastColors),"Gives every layer a distinct Material ID color. Undo is supported."));
-            materialActions.Controls.Add(Tip(Button("Create layer materials",delegate{Read();ApplyMaterials();}),"Creates basic Rhino materials from the target materials in the table. Undo is supported."));
-            material.Controls.Add(materialActions,0,0);
+            materialActions.Controls.Add(Tip(Button("Reload from Rhino",delegate{Read();config.Scan(doc);FillLayers();}),"Reads the layers, materials and colors from Rhino again."));
+            materialActions.Controls.Add(Tip(Button("Assign contrast colors",AssignHighContrastColors),"Gives every row a distinct Material ID color. For layers this changes the layer display color, with undo; for materials only the export color changes."));
+            createMaterials=Button("Create layer materials",delegate{Read();ApplyMaterials();});materialActions.Controls.Add(Tip(createMaterials,"Creates basic Rhino materials from the target materials in the table. Undo is supported. Only for layer regions."));
+            material.Controls.Add(materialActions,0,1);
             layers.Dock=DockStyle.Fill;layers.AllowUserToAddRows=false;layers.AllowUserToDeleteRows=false;layers.AllowUserToResizeRows=false;layers.RowHeadersVisible=false;layers.AutoSizeRowsMode=DataGridViewAutoSizeRowsMode.AllCells;Theme.Style(layers);
             layers.Columns.Add(new DataGridViewTextBoxColumn{Name="Layer",HeaderText="Layer",ReadOnly=true,Width=Theme.S(220)});layers.Columns.Add(new DataGridViewTextBoxColumn{Name="Color",HeaderText="ID color",ReadOnly=true,Width=Theme.S(130)});layers.Columns.Add(new DataGridViewTextBoxColumn{Name="Material",HeaderText="Target material",AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill});
             layers.CellPainting+=PaintSwatch;
-            var gridCard=new Card{Dock=DockStyle.Fill,Margin=Padding.Empty,Padding=new Padding(Theme.S(2))};gridCard.Controls.Add(layers);material.Controls.Add(gridCard,0,1);FillLayers();
+            var gridCard=new Card{Dock=DockStyle.Fill,Margin=Padding.Empty,Padding=new Padding(Theme.S(2))};gridCard.Controls.Add(layers);material.Controls.Add(gridCard,0,2);FillLayers();
 
             var blend=Stack();
             wear.Multiline=true;wear.ScrollBars=ScrollBars.Vertical;wear.Text=config.WearInstructions;padding.Minimum=0;padding.Maximum=256;padding.Value=config.MaskPadding;occlusion.Text=config.OcclusionMask;
@@ -271,10 +279,19 @@ namespace RhinoAI
             }
             catch(Exception e){if(!IsDisposed)Log(e.Message);}
         }
-        void FillLayers(){layers.Rows.Clear();foreach(var l in config.Layers){int i=layers.Rows.Add(l.Name,l.Color,l.Material);layers.Rows[i].Tag=l;}}
+        void FillLayers()
+        {
+            bool byMaterial=config.ByMaterial();layers.Columns[0].HeaderText=byMaterial?"Rhino material":"Layer";if(createMaterials!=null)createMaterials.Enabled=!byMaterial;
+            layers.Rows.Clear();foreach(var l in config.Rules()){int i=layers.Rows.Add(l.Name,l.Color,l.Material);layers.Rows[i].Tag=l;}
+        }
+        // The grid edits whichever rule list is shown. Strict reads refuse blank targets; a mode switch keeps them.
+        void ReadGrid(bool strict)
+        {
+            layers.EndEdit();foreach(DataGridViewRow row in layers.Rows){var l=(LayerRule)row.Tag;l.Material=Convert.ToString(row.Cells[2].Value).Trim();if(strict&&string.IsNullOrWhiteSpace(l.Material))throw new ArgumentException("Enter a target material for "+(config.ByMaterial()?"material":"layer")+": "+l.Name);}
+        }
         void Read()
         {
-            layers.EndEdit();foreach(DataGridViewRow row in layers.Rows){var l=(LayerRule)row.Tag;l.Material=Convert.ToString(row.Cells[2].Value).Trim();if(string.IsNullOrWhiteSpace(l.Material))throw new ArgumentException("Enter a target material for layer: "+l.Name);}
+            ReadGrid(true);config.MaterialIdSource=idSource.SelectedIndex==1?"material":"layer";
             config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.TargetWorkflow=SelectedTarget();config.LongEdge=(int)edge.Value;config.LockSceneAspect=sceneAspect.Checked;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.MatchWallpaperAspect=wallpaperAspect.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;config.SyncReferences=syncStyle.Checked;
             string chosen=Convert.ToString(frameRatio.SelectedItem);config.FrameRatio=chosen==FrameAsIs?"frame":chosen==FrameAuto?"auto":chosen;
             StoreEngine();config.AiEngine=shown.Id;config.AiPrompt=aiPrompt.Text;config.AiOutput=aiOutput.Text.Trim();config.AiChannels=channels.CheckedItems.Cast<string>().ToList();config.AiViews=TickedViews();config.AiReferences=references.Items.Cast<string>().ToList();
@@ -396,7 +413,8 @@ namespace RhinoAI
         void ApplyColors(){uint undo=doc.BeginUndoRecord("Rhino to Comfy layer color codes");try{foreach(var rule in config.Layers){var layer=doc.Layers.FindId(new Guid(rule.Id));if(layer!=null){layer.Color=ColorTranslator.FromHtml(rule.Color);}}}finally{doc.EndUndoRecord(undo);}doc.Views.Redraw();Log("ID colors applied to the layer display colors. Undo is supported.");}
         void AssignHighContrastColors()
         {
-            int slot=1;foreach(var rule in config.Layers.OrderBy(l=>l.Index))rule.Color=Raster.Hex(Raster.Palette(slot++));
+            int slot=1;foreach(var rule in config.Rules().OrderBy(l=>l.Index))rule.Color=Raster.Hex(Raster.Palette(slot++));
+            if(config.ByMaterial()){FillLayers();config.Save();Log("Contrast Material ID colors assigned to the materials. Rhino materials are unchanged.");return;}
             ApplyColors();config.Scan(doc);FillLayers();config.Save();Log("Contrast Material ID colors assigned and HEX mapping updated.");
         }
         void ApplyMaterials()
@@ -418,7 +436,7 @@ namespace RhinoAI
         }
         string SyncSettingsSignature()
         {
-            return string.Join("|",new[]{server.Text,output.Text,workflow.Text,Convert.ToString(target.SelectedItem),edge.Value.ToString(),sceneAspect.Checked.ToString(),Convert.ToString(frameRatio.SelectedItem),selected.Checked.ToString(),syncStyle.Checked.ToString(),string.Join(";",references.Items.Cast<string>().Select(p=>p+AutoSyncWatcher.FileStamp(p))),tryon.Checked.ToString(),wallpaperAspect.Checked.ToString(),detailPriority.Checked.ToString(),adaptiveMask.Checked.ToString(),wear.Text,padding.Value.ToString(),occlusion.Text,AutoSyncWatcher.FileStamp(occlusion.Text),string.Join(";",layers.Rows.Cast<DataGridViewRow>().Select(r=>string.Join("|",r.Cells.Cast<DataGridViewCell>().Select(c=>Convert.ToString(c.Value)))))});
+            return string.Join("|",new[]{server.Text,output.Text,workflow.Text,Convert.ToString(target.SelectedItem),edge.Value.ToString(),idSource.SelectedIndex.ToString(),sceneAspect.Checked.ToString(),Convert.ToString(frameRatio.SelectedItem),selected.Checked.ToString(),syncStyle.Checked.ToString(),string.Join(";",references.Items.Cast<string>().Select(p=>p+AutoSyncWatcher.FileStamp(p))),tryon.Checked.ToString(),wallpaperAspect.Checked.ToString(),detailPriority.Checked.ToString(),adaptiveMask.Checked.ToString(),wear.Text,padding.Value.ToString(),occlusion.Text,AutoSyncWatcher.FileStamp(occlusion.Text),string.Join(";",layers.Rows.Cast<DataGridViewRow>().Select(r=>string.Join("|",r.Cells.Cast<DataGridViewCell>().Select(c=>Convert.ToString(c.Value)))))});
         }
         async Task Export(bool send,bool automatic)
         {

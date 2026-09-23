@@ -200,7 +200,9 @@ Export settings 页面的 **Longest edge** 决定所有控制图的尺寸，默�
 
 同一次导出的基础控制图使用完全相同的相机和透视。Portrait 输出和局部细节图都使用从原视角裁切出的相机子视锥，不改变相机位置或镜头，因此 Perspective 保持一致。
 
-Material ID 现在使用黑色背景，并严格跟随 Rhino 图层显示颜色。插件会把完全相同的 HEX 编码写进材质映射 Prompt。相邻部件不容易区分时，可以点击 **Assign contrast colors**。正在使用的图层必须采用不同的非黑色颜色，避免材质区域含混或消失。
+Layer materials 页面顶部的 **Material ID regions from** 决定分区依据。**Rhino layers**（默认）按图层分区，颜色取图层显示色；**Rhino materials** 按对象实际使用的渲染材质分区，按 Rhino 的显示规则解析（按对象、按图层或按父级块），同一图层上材质不同的部件也能分开。两种模式各自保存目标材质表和 ID 颜色；材质模式的颜色由插件调色板分配，不会改动 Rhino 材质。**Create layer materials** 只对图层模式有效。
+
+图层模式下，Material ID 使用黑色背景，并严格跟随 Rhino 图层显示颜色。插件会把完全相同的 HEX 编码写进材质映射 Prompt。相邻部件不容易区分时，可以点击 **Assign contrast colors**。正在使用的图层必须采用不同的非黑色颜色，避免材质区域含混或消失。
 
 ## 构建与测试
 

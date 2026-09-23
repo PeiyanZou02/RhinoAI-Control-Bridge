@@ -200,7 +200,9 @@ For strict compositing, use `inpaint_mask.png` with a workflow that composites g
 
 All raster controls from a single export share the same base camera and perspective. Portrait output and detail controls use cropped camera sub-frustums derived from the same view, without changing the camera location or lens.
 
-Material IDs follow the Rhino layer display colors exactly, on a black background. The same HEX values are written into the material mapping prompt. Use **Assign contrast colors** in the plug-in when adjacent parts are hard to distinguish. Visible layers must use unique, non-black colors so their regions remain unambiguous.
+**Material ID regions from** on the Layer materials page chooses what a region is. **Rhino layers** (default) gives every layer one color, taken from its display color. **Rhino materials** gives every render material the objects use one color, resolved the way Rhino shows it (by object, by layer or by parent block), so parts that share a layer but carry different materials stay separate. Each mode keeps its own table of target materials and ID colors; material colors are assigned from the plug-in palette and never change the Rhino materials. **Create layer materials** applies to layer regions only.
+
+In layer mode, Material IDs follow the Rhino layer display colors exactly, on a black background. The same HEX values are written into the material mapping prompt. Use **Assign contrast colors** in the plug-in when adjacent parts are hard to distinguish. Visible layers must use unique, non-black colors so their regions remain unambiguous.
 
 ## Build and test
 

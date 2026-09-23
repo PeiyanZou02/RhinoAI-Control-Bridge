@@ -43,6 +43,26 @@ namespace RhinoAI
         public int SettingsVersion=0;
         public string Style="Photorealistic visualization, physically plausible materials, soft natural lighting, accurate scale, balanced exposure, fine surface detail. Preserve the supplied design.";
         public List<LayerRule> Layers=new List<LayerRule>();
+        // Material ID regions come from Rhino layers ("layer", one color per layer) or from the render
+        // materials the objects use ("material"). Material rules reuse LayerRule: Id = material id or
+        // "default", Index = Rhino material index + 1, so Index + 1 is the region key in both modes.
+        public string MaterialIdSource="layer";
+        public List<LayerRule> Materials=new List<LayerRule>();
+        public bool ByMaterial(){return MaterialIdSource=="material";}
+        public List<LayerRule> Rules(){return ByMaterial()?Materials:Layers;}
+        public LayerRule MaterialRule(Material mat)
+        {
+            bool none=mat==null||mat.MaterialIndex<0;string id=none?"default":mat.Id.ToString(),name=none?"Default material":string.IsNullOrWhiteSpace(mat.Name)?"Material "+mat.MaterialIndex:mat.Name;
+            var rule=Materials.FirstOrDefault(m=>m.Id==id);
+            if(rule==null)
+            {
+                rule=MaterialRules.Guess(id,0,name);
+                // The first palette color no other material uses, so new materials never collide.
+                for(int slot=1;;slot++){string color=Raster.Hex(Raster.Palette(slot));if(Materials.All(m=>!string.Equals(m.Color,color,StringComparison.OrdinalIgnoreCase))){rule.Color=color;break;}}
+                Materials.Add(rule);
+            }
+            rule.Index=none?0:mat.MaterialIndex+1;rule.Name=name;return rule;
+        }
         // AI render page. Lists start null because Json.NET appends saved items to a non-empty default.
         public string AiEngine="google";
         public string AiOutput=Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),"RhinoAI Renders");
@@ -66,13 +86,24 @@ namespace RhinoAI
             }
             var ids=new HashSet<string>(doc.Layers.Where(l=>!l.IsDeleted).Select(l=>l.Id.ToString()));
             Layers=Layers.Where(l=>ids.Contains(l.Id)).ToList();
+            // Only materials some object really uses, resolved the way the export resolves them.
+            var used=new HashSet<string>();
+            foreach(var obj in doc.Objects.GetObjectList(new ObjectEnumeratorSettings{NormalObjects=true,LockedObjects=true,HiddenObjects=false,ReferenceObjects=true}))used.Add(MaterialRule(Exporter.ObjectMaterial(obj,null)).Id);
+            foreach(var obj in doc.Objects.GetObjectList(new ObjectEnumeratorSettings{NormalObjects=true,LockedObjects=true,HiddenObjects=false,ReferenceObjects=true}))CollectMaterials(obj,Exporter.ObjectMaterial(obj,null),used,0);
+            Materials=Materials.Where(m=>used.Contains(m.Id)).ToList();
+        }
+        void CollectMaterials(RhinoObject obj,Material inherited,HashSet<string> used,int nesting)
+        {
+            var instance=obj as InstanceObject;if(instance==null||nesting>32)return;
+            foreach(var child in instance.InstanceDefinition.GetObjects()){var mat=Exporter.ObjectMaterial(child,inherited);used.Add(MaterialRule(mat).Id);CollectMaterials(child,mat,used,nesting+1);}
         }
     }
     public static class MaterialRules
     {
-        public static LayerRule Guess(Layer layer)
+        public static LayerRule Guess(Layer layer){return Guess(layer.Id.ToString(),layer.Index,layer.FullPath);}
+        public static LayerRule Guess(string id,int index,string fullPath)
         {
-            string name=layer.FullPath.ToLowerInvariant();string mat="neutral matte material",desc="Neutral warm-grey matte finish, fine uniform texture, low specular reflection; replace this suggestion with the intended material.";
+            string name=fullPath.ToLowerInvariant();string mat="neutral matte material",desc="Neutral warm-grey matte finish, fine uniform texture, low specular reflection; replace this suggestion with the intended material.";
             if(Has(name,"ceramic","porcelain","陶瓷","瓷")){mat="glazed ceramic";desc="Warm ivory glazed ceramic, smooth continuous glaze with subtle handmade surface variation, soft broad highlights, roughness 0.15–0.30; preserve the original sculpted form, edge thickness and openings.";}
             else if(Has(name,"gold","黄金","金色","18k")){mat="18k yellow gold";desc="Polished 18k yellow gold, warm rich gold tone, metallic reflectance, roughness 0.12–0.22, finely controlled highlights and subtle micro-scratches at realistic scale; preserve fine details, edges and engraving.";}
             else if(Has(name,"diamond","gem","钻石","宝石")){mat="faceted gemstone";desc="Clear faceted gemstone with crisp facet boundaries, physically plausible refraction and restrained spectral dispersion, high optical clarity; preserve the exact stone count, cut, size and setting. Do not add extra gemstones.";}
@@ -84,12 +115,13 @@ namespace RhinoAI
             else if(Has(name,"stone","marble","石","大理石")){mat="light limestone";desc="Warm ivory honed limestone, subtle natural mineral variation and sparse fine pores, roughness 0.50–0.70, restrained reflectivity, realistic slab scale and carefully aligned joints.";}
             else if(Has(name,"plant","grass","tree","绿植","草","树")){mat="vegetation";desc="Natural muted green vegetation with subtle hue variation, fine leaf detail and soft light transmission, realistic leaf scale, no artificial plastic shine.";}
             else if(Has(name,"fabric","cloth","布","软包")){mat="linen fabric";desc="Warm neutral woven linen, fine visible weave at real scale, matte roughness 0.85–0.95, soft diffuse reflection, gentle fabric variation.";}
-            return new LayerRule{Id=layer.Id.ToString(),Index=layer.Index,Name=layer.FullPath,Color="",Material=mat,Description=desc};
+            return new LayerRule{Id=id,Index=index,Name=fullPath,Color="",Material=mat,Description=desc};
         }
         static bool Has(string name,params string[] keys){return keys.Any(name.Contains);}
         public static string Prompt(IEnumerable<LayerRule> layers,string style){return Prompt(layers,null as IDictionary<int,double>);}
         // One line per visible layer, largest region first: hex, color name, share of the frame, layer name, material.
-        public static string Prompt(IEnumerable<LayerRule> layers,IDictionary<int,double> share)
+        public static string Prompt(IEnumerable<LayerRule> layers,IDictionary<int,double> share){return Prompt(layers,share,"layer");}
+        public static string Prompt(IEnumerable<LayerRule> layers,IDictionary<int,double> share,string kind)
         {
             var sb=new StringBuilder();
             foreach(var layer in layers.Where(l=>!string.IsNullOrWhiteSpace(l.Material)).OrderByDescending(l=>Share(share,l)))
@@ -98,7 +130,7 @@ namespace RhinoAI
                 try{name=Raster.ColorName(Convert.ToInt32(hex.TrimStart('#'),16)).ToUpperInvariant();}catch(FormatException){}
                 sb.Append(hex);if(name!="")sb.Append(" — the "+name+" region");
                 if(part>0)sb.Append(", "+(part<0.01?"under 1":"about "+Math.Round(part*100))+"% of the frame");
-                if(!string.IsNullOrWhiteSpace(layer.Name))sb.Append(", Rhino layer \""+layer.Name.Replace("\"","'")+"\"");
+                if(!string.IsNullOrWhiteSpace(layer.Name))sb.Append(", Rhino "+kind+" \""+layer.Name.Replace("\"","'")+"\"");
                 sb.Append(" = "+layer.Material.Trim()+"\n");
             }
             return sb.ToString().TrimEnd();
@@ -116,6 +148,7 @@ namespace RhinoAI
         public object View;
         public byte[] Wallpaper,Reference,Rendered;
         public string WallpaperPath;
+        public Config Config;
     }
     public sealed class ExportResult
     {
@@ -170,9 +203,9 @@ namespace RhinoAI
             int w=layout.OutputWidth,h=layout.OutputHeight;
             config.Scan(doc);
             var captureCamera=new Camera{Width=layout.CaptureWidth,Height=layout.CaptureHeight,Left=l,Right=r,Bottom=b,Top=t,Near=n,Far=f,Perspective=vp.IsPerspectiveProjection};
-            var s=new Snapshot{Camera=ProductExport.CropCamera(captureCamera,layout.Crop,w,h)};
+            var s=new Snapshot{Camera=ProductExport.CropCamera(captureCamera,layout.Crop,w,h),Config=config};
             s.View=new {name=vp.Name,camera=vp.CameraLocation,target=vp.CameraTarget,up=vp.CameraUp,units=doc.ModelUnitSystem.ToString(),viewportWidth=size.Width,viewportHeight=size.Height,captureWidth=layout.CaptureWidth,captureHeight=layout.CaptureHeight,outputWidth=w,outputHeight=h,sceneAspectLocked=!config.ProductMode&&config.LockSceneAspect,wallpaperWidth=wallpaperWidth,wallpaperHeight=wallpaperHeight,wallpaperCropPixels=new[]{layout.Crop.Left,layout.Crop.Top,layout.Crop.Right,layout.Crop.Bottom},wallpaperAspectMatched=config.ProductMode&&config.MatchWallpaperAspect&&wallpaperWidth>0};
-            foreach(var rule in config.Layers){s.LayerColors[rule.Index+1]=Convert.ToInt32(rule.Color.TrimStart('#'),16);s.LayerTargetMaterials[rule.Index+1]=rule.Material;}
+            foreach(var rule in config.Rules()){s.LayerColors[rule.Index+1]=Convert.ToInt32(rule.Color.TrimStart('#'),16);s.LayerTargetMaterials[rule.Index+1]=rule.Material;}
             var transform=vp.GetTransform(CoordinateSystem.World,CoordinateSystem.Camera);
             var objects=doc.Objects.GetObjectList(new ObjectEnumeratorSettings{NormalObjects=true,LockedObjects=true,HiddenObjects=false,ReferenceObjects=true});
             var materials=new Dictionary<string,int>();int id=0;
@@ -189,7 +222,7 @@ namespace RhinoAI
             }
             if(s.Triangles.Count==0)throw new InvalidOperationException("No surfaces to export. Supported: Brep, Extrusion, Mesh, SubD and block instances.");
             s.Warnings.Add("Control images treat transparent surfaces as opaque. basecolor is the flat material color without textures, lighting or PBR channels. Curves, points, annotations and unbaked Grasshopper previews are not included.");
-            s.Warnings.Add("Material ID follows Rhino layers strictly: one color per layer. Per-face material overrides are not detected.");
+            s.Warnings.Add(config.ByMaterial()?"Material ID follows the Rhino render material of each object: one color per material, resolved through by-layer and by-parent sources. Per-face material overrides are not detected.":"Material ID follows Rhino layers strictly: one color per layer. Per-face material overrides are not detected.");
             s.Warnings.Add("Normals are in camera space: R=right, G=up, B=toward camera. Edges come from occlusion, object boundaries, depth and normal changes, not Make2D or Canny.");
             if(ratio!=null)s.Warnings.Add("Frame exported at "+ratio[0]+":"+ratio[1]+", a ratio image models draw natively, so the result is not stretched or recomposed. Set the model node to the same ratio, or to auto. All control images share one camera sub-frustum.");
             else if(!config.ProductMode&&config.LockSceneAspect)s.Warnings.Add("Standard scene locked to the widescreen frame "+config.SceneAspectWidth+" × "+config.SceneAspectHeight+". Window and sidebar size no longer change the output, and all control images share one camera sub-frustum.");
@@ -246,7 +279,7 @@ namespace RhinoAI
         {
             if(nesting>32)throw new InvalidOperationException("Block instances are nested deeper than 32 levels.");
             if(obj.IsHidden || !VisibleLayer(doc,obj.Attributes.LayerIndex))return;
-            Material mat=obj.Attributes.MaterialSource==ObjectMaterialSource.MaterialFromParent && inherited!=null?inherited:obj.GetMaterial(true);
+            Material mat=ObjectMaterial(obj,inherited);
             var instance=obj as InstanceObject;
             if(instance!=null){foreach(var child in instance.InstanceDefinition.GetObjects())AddObject(doc,child,world*instance.InstanceXform,camera,mat,s,materials,ref id,nesting+1);return;}
             var meshes=new List<Mesh>();var geometry=obj.Geometry;
@@ -260,8 +293,13 @@ namespace RhinoAI
             int objectId=++id,layerId=obj.Attributes.LayerIndex+1;string key=mat==null?"default":mat.Id.ToString()+":"+mat.DiffuseColor.ToArgb();
             if(!materials.ContainsKey(key))materials[key]=materials.Count+1;
             int materialId=layerId;
-            string targetMaterial;s.LayerTargetMaterials.TryGetValue(layerId,out targetMaterial);
-            int materialColor;if(!s.LayerColors.TryGetValue(layerId,out materialColor))materialColor=Raster.Palette(materialId);
+            if(s.Config!=null&&s.Config.ByMaterial())
+            {
+                var rule=s.Config.MaterialRule(mat);materialId=rule.Index+1;
+                if(!s.LayerColors.ContainsKey(materialId)){s.LayerColors[materialId]=Convert.ToInt32(rule.Color.TrimStart('#'),16);s.LayerTargetMaterials[materialId]=rule.Material;}
+            }
+            string targetMaterial;s.LayerTargetMaterials.TryGetValue(materialId,out targetMaterial);
+            int materialColor;if(!s.LayerColors.TryGetValue(materialId,out materialColor))materialColor=Raster.Palette(materialId);
             s.Objects.Add(new {id=objectId,rhinoId=obj.Id,layerId=layerId,materialId=materialId,materialName=string.IsNullOrWhiteSpace(targetMaterial)?(mat==null?"Default":mat.Name):targetMaterial,objectColor=Raster.Hex(Raster.Palette(objectId)),materialColor=Raster.Hex(materialColor)});
             foreach(var m in meshes)using(m)
             {
@@ -276,6 +314,11 @@ namespace RhinoAI
                 }
             }
         }
+        // The render material an object shows: its own, its layer's, or the block instance's when set by parent.
+        public static Material ObjectMaterial(RhinoObject obj,Material inherited)
+        {
+            return obj.Attributes.MaterialSource==ObjectMaterialSource.MaterialFromParent&&inherited!=null?inherited:obj.GetMaterial(true);
+        }
         public static ExportResult Render(Snapshot snapshot,Config config,Action<int> progress)
         {
             string dir=Path.Combine(config.Output,DateTime.Now.ToString("yyyyMMdd_HHmmss_fff")+"_"+Guid.NewGuid().ToString("N").Substring(0,6));
@@ -288,15 +331,15 @@ namespace RhinoAI
             if(duplicate!=null)throw new InvalidOperationException("Several visible Rhino layers share the Material ID color "+Raster.Hex(duplicate.Key)+". Give these layers different colors, or click Assign contrast colors.");
             var files=raster.Save(dir,snapshot.LayerColors);
             if(snapshot.Rendered!=null&&snapshot.Rendered.Length>0){string rendered=Path.Combine(dir,"rendered.png");File.WriteAllBytes(rendered,snapshot.Rendered);files["rendered"]=rendered;}
-            var rules=config.Layers.Where(x=>visible.Contains(x.Index+1)).ToList();
+            var rules=config.Rules().Where(x=>visible.Contains(x.Index+1)).ToList();
             var share=raster.Materials.Where(x=>x>0).GroupBy(x=>x).ToDictionary(g=>g.Key,g=>g.Count()/(double)raster.Materials.Length);
-            string prompt=MaterialRules.Prompt(rules,share);
+            string prompt=MaterialRules.Prompt(rules,share,config.ByMaterial()?"material":"layer");
             string wear=null,placementConstraint=null;
             if(config.ProductMode)wear=ProductExport.Save(snapshot,raster,config,dir,files,out placementConstraint);
             File.WriteAllText(Path.Combine(dir,"material_prompt.txt"),prompt,Encoding.UTF8);
             File.WriteAllText(Path.Combine(dir,"color_legend.json"),JsonConvert.SerializeObject(rules,Formatting.Indented),Encoding.UTF8);
             File.WriteAllText(Path.Combine(dir,"manifest.json"),JsonConvert.SerializeObject(new{schema="rhino-ai/1",camera=snapshot.Camera,view=snapshot.View,files=files,objects=snapshot.Objects,layers=rules,warnings=snapshot.Warnings,depth=new{format="float32 little-endian, row-major, top-left origin",units="Rhino document units",measurement="linear camera-axis distance",background="NaN",near=raster.Depth.Where(x=>!float.IsInfinity(x)).Min(),far=raster.Depth.Where(x=>!float.IsInfinity(x)).Max()},normal="camera space: +X right, +Y up, +Z toward camera; RGB=(normal+1)/2"},Formatting.Indented),Encoding.UTF8);
-            var html=new StringBuilder("<!doctype html><meta charset='utf-8'><title>Rhino to Comfy · Color Code</title><style>body{font:16px system-ui;background:#16191e;color:#eee;margin:32px}img{max-width:100%;max-height:65vh}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:12px;border-bottom:1px solid #444}pre{white-space:pre-wrap;line-height:1.6}</style><h1>Rhino to Comfy · Color Code</h1><img src='color_code.png'><table><tr><th>ID color</th><th>Rhino layer</th><th>Target material</th></tr>");
+            var html=new StringBuilder("<!doctype html><meta charset='utf-8'><title>Rhino to Comfy · Color Code</title><style>body{font:16px system-ui;background:#16191e;color:#eee;margin:32px}img{max-width:100%;max-height:65vh}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:12px;border-bottom:1px solid #444}pre{white-space:pre-wrap;line-height:1.6}</style><h1>Rhino to Comfy · Color Code</h1><img src='color_code.png'><table><tr><th>ID color</th><th>Rhino "+(config.ByMaterial()?"material":"layer")+"</th><th>Target material</th></tr>");
             foreach(var rule in rules)html.Append("<tr><td style='border-left:24px solid "+rule.Color+"'>"+rule.Color+"</td><td>"+Escape(rule.Name)+"</td><td>"+Escape(rule.Material)+"</td></tr>");
             html.Append("</table><h2>Color → target material</h2><pre>"+Escape(prompt)+"</pre><h2>Depth / Lines / Normals</h2><img src='depth.png'><img src='lineart.png'><img src='normal.png'>");
             if(config.ProductMode)html.Append("<h2>Background blend · reference / placement / edit mask</h2><img src='reference.png'><img src='placement.png'><img src='inpaint_mask.png'><pre>"+Escape(wear)+"</pre>");

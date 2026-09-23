@@ -107,7 +107,7 @@ namespace RhinoAI
                 maps["depth"][i]=Rgb(d,d,d);int inv=hit?256-d:0;maps["depth_inverse"][i]=Rgb(inv,inv,inv);
                 maps["normal"][i]=hit?Rgb(Encode(NX[i]),Encode(NY[i]),Encode(NZ[i])):0;
                 maps["mask"][i]=hit?0xffffff:0;
-                maps["color_code"][i]=hit?layerColors[Layers[i]]:0;
+                int layerColor;maps["color_code"][i]=hit?(layerColors.TryGetValue(Layers[i],out layerColor)?layerColor:Palette(Layers[i])):0;
                 int materialColor;
                 maps["material_id"][i]=hit?(layerColors.TryGetValue(Materials[i],out materialColor)?materialColor:Palette(Materials[i])):0;
                 maps["object_id"][i]=hit?Palette(Objects[i]):0;
