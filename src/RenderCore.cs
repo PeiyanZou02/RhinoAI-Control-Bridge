@@ -178,8 +178,22 @@ namespace RhinoAI
                         string text;if(count[region]<n*0.002||!labels.TryGetValue(region,out text)||string.IsNullOrWhiteSpace(text))continue;
                         double cx=sumX[region]/count[region],cy=sumY[region]/count[region];int best=-1;double bestDistance=double.MaxValue;
                         for(int i=0;i<n;i+=3){if(Materials[i]!=region)continue;double dx=i%w-cx,dy=i/w-cy,d=dx*dx+dy*dy;if(d<bestDistance){bestDistance=d;best=i;}}
-                        if(best<0)continue;var measured=g.MeasureString(text,font);
-                        float x=Math.Max(2f,Math.Min(w-measured.Width-2f,best%w-measured.Width/2f)),y=Math.Max(2f,Math.Min(h-measured.Height-2f,best/w-measured.Height/2f));
+                        if(best<0)continue;var measured=g.MeasureString(text,font);int need=(int)Math.Ceiling(measured.Width)+4,px=best%w,py=best/w;
+                        // Centre the label on a run of the region long enough to hold it, on this row or a few rows away.
+                        double runDistance=double.MaxValue;
+                        foreach(int dy in new[]{0,1,-1,2,-2,3,-3})
+                        {
+                            int row=best/w+(int)Math.Round(dy*size*1.2);if(row<0||row>=h)continue;
+                            for(int start=0;start<w;)
+                            {
+                                if(Materials[row*w+start]!=region){start++;continue;}
+                                int end=start;while(end<w&&Materials[row*w+end]==region)end++;
+                                if(end-start>=need){int centre=Math.Max(start+need/2,Math.Min(end-need/2,(int)cx));double d=Math.Abs(centre-cx)+Math.Abs(row-cy);if(d<runDistance){runDistance=d;px=centre;py=row;}}
+                                start=end;
+                            }
+                            if(runDistance<double.MaxValue)break;
+                        }
+                        float x=Math.Max(2f,Math.Min(w-measured.Width-2f,px-measured.Width/2f)),y=Math.Max(2f,Math.Min(h-measured.Height-2f,py-measured.Height/2f));
                         using(var outline=new System.Drawing.Drawing2D.GraphicsPath()){outline.AddString(text,family,(int)FontStyle.Bold,size,new PointF(x,y),StringFormat.GenericDefault);g.DrawPath(pen,outline);g.FillPath(Brushes.White,outline);}
                     }
                 }
@@ -192,7 +206,7 @@ namespace RhinoAI
             double r=((rgb>>16)&255)/255.0,g=((rgb>>8)&255)/255.0,b=(rgb&255)/255.0,max=Math.Max(r,Math.Max(g,b)),min=Math.Min(r,Math.Min(g,b)),delta=max-min;
             if(delta<0.02)return Rgb(214,214,214);
             double hue=max==r?60*(((g-b)/delta)%6):max==g?60*((b-r)/delta+2):60*((r-g)/delta+4);if(hue<0)hue+=360;
-            return FromHsv(hue,0.40,0.92);
+            return FromHsv(hue,0.30,0.93);
         }
         public static int Darken(int rgb){return Rgb((int)(((rgb>>16)&255)*0.86),(int)(((rgb>>8)&255)*0.86),(int)((rgb&255)*0.86));}
         public static int FromHsv(double hue,double s,double v)
