@@ -111,7 +111,6 @@ namespace RhinoAI
             var guessed=MaterialRules.Guess("m1",3,"Brushed Steel");check(guessed.Id=="m1"&&guessed.Index==3&&guessed.Material=="satin silver metal","a material rule guesses its target from the material name");
             check(MaterialRules.TargetFromName("KVANT / Ivory_enamel")=="ivory enamel"&&MaterialRules.TargetFromName("Site::Walls::Brick-red")=="brick red"&&MaterialRules.TargetFromName("  ")=="neutral matte material","Rhino names become readable target materials");
             int soft=Raster.Soft(0x651FFF);check(soft!=0&&Raster.ColorName(soft).EndsWith("violet-purple")&&Raster.Soft(0x000000)!=0&&Raster.Soft(0xFF1744)!=Raster.Soft(0x651FFF),"softened ID colors keep their hue and never turn black");
-            check(guide.Contains("carries its target material written on it")&&!PromptGuide.Build(chosen.Select(x=>x.Key).ToList(),export,new Config{AiPrompt="x",AiChannels=config.AiChannels,MaterialIdStyle="flat"}).Contains("carries its target material"),"the label note follows the material_id style");
             var masked=new ExportResult{Directory=root,Files=new Dictionary<string,string>{{"rendered",png},{"material_mask_1",png},{"material_mask_2",png}},MaskMaterials=new Dictionary<string,string>{{"material_mask_2","oak"},{"material_mask_1","brushed titanium"}}};
             var maskChannels=PromptGuide.Select(masked,new Config{MaterialMasks=true,AiChannels=new List<string>{"rendered"}},14,null).Select(x=>x.Key).ToList();
             check(maskChannels.SequenceEqual(new[]{"rendered","material_mask_1","material_mask_2"})&&PromptGuide.Build(maskChannels,masked,new Config{MaterialMasks=true}).Contains("Image 2 (material_mask_1): MATERIAL MASK for \"brushed titanium\""),"masks follow the controls in order and name their material");
@@ -171,8 +170,6 @@ namespace RhinoAI
                 for(int x=0;x<64;x++){if(edges.GetPixel(x,32).R>0){run++;widest=Math.Max(widest,run);}else run=0;if(shape.GetPixel(x,32).R<0x40)dark++;if(edges.GetPixel(x,32).R>0&&mask.GetPixel(x,32).R==0)outside++;}
                 check(widest==1&&dark==2,"edges and shape_lock outlines are one pixel wide at 64 px");
             check(maps.ContainsKey("material_mask_1")&&raster.MaskRegions["material_mask_1"]==1,"a mask per material region is written");
-            var labeledMaps=raster.Save(Path.Combine(root,"raster-labeled"),new Dictionary<int,int>{{1,Raster.Soft(0xff0000)}},new Dictionary<int,string>{{1,"oak"}});
-            using(var labeledImage=new System.Drawing.Bitmap(labeledMaps["material_id"]))check(Enumerable.Range(0,64).Any(x=>labeledImage.GetPixel(x,32).ToArgb()==System.Drawing.Color.White.ToArgb()||labeledImage.GetPixel(x,32).ToArgb()==System.Drawing.Color.Black.ToArgb()),"the material name is drawn on its region");
                 check(outside==0,"outline pixels stay on the object, so the silhouette is not enlarged");
             }
             check(Raster.LineWeight(1024,589)==1&&Raster.LineWeight(2048,1178)==1&&Raster.LineWeight(4096,2356)==3,"line weight grows only at very large sizes");

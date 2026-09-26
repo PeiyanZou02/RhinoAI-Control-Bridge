@@ -125,7 +125,7 @@ namespace RhinoAI
             // Also provide a drag-and-drop UI workflow for inspecting all uploaded channels.
             File.WriteAllText(Path.Combine(export.Directory,"comfy_preview.workflow.json"),PreviewUi(uploaded).ToString(),Encoding.UTF8);
             string userPrompt=config.ProductMode?(config.WearInstructions??"").Trim():"";
-            var manifest=new JObject{["schema"]="rhino-ai-live/1",["revision"]=Guid.NewGuid().ToString("N"),["images"]=JObject.FromObject(uploaded),["prompts"]=new JObject{["color_materials"]=export.Prompt??"",["user_prompt"]=userPrompt,["placement_constraint"]=export.PlacementConstraint??"",["mask_materials"]=JObject.FromObject(export.MaskMaterials??new Dictionary<string,string>()),["material_id_style"]=config.MaterialIdStyle??"labeled"},["input_profile"]=config.ProductMode?(config.DetailPriority?"detail_priority":"full_frame"):"scene"};
+            var manifest=new JObject{["schema"]="rhino-ai-live/1",["revision"]=Guid.NewGuid().ToString("N"),["images"]=JObject.FromObject(uploaded),["prompts"]=new JObject{["color_materials"]=export.Prompt??"",["user_prompt"]=userPrompt,["placement_constraint"]=export.PlacementConstraint??"",["mask_materials"]=JObject.FromObject(export.MaskMaterials??new Dictionary<string,string>()),["material_id_style"]=config.MaterialIdStyle??"soft"},["input_profile"]=config.ProductMode?(config.DetailPriority?"detail_priority":"full_frame"):"scene"};
             // An empty target follows whichever workflow the ComfyUI window shows. A new request id per
             // publish lets the window switch once, without fighting the user afterwards.
             if(!string.IsNullOrWhiteSpace(config.TargetWorkflow))

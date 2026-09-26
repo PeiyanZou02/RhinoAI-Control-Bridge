@@ -207,7 +207,7 @@ All raster controls from a single export share the same base camera and perspect
 
 Image models read a saturated flat color as paint, so a purple ID region tends to come back as purple wood. Three measures, all on by default or one click away:
 
-- **Write the material name on each region and soften the ID colors** (Layer materials page, default on). `material_id` uses pastel versions of the ID colors, same hue at low saturation, and the target material is written on every region large enough to hold a label. The model reads a name far more reliably than a hex code; the mapping quotes the softened colors. Turn it off to export the raw flat colors.
+- **Soften the ID colors** (Layer materials page, default on). `material_id` uses pastel versions of the ID colors, same hue at low saturation, so a leak is a faint tint at most; the mapping quotes the softened colors. Turn it off to export the raw flat colors.
 - **Also send one mask per material** (default off): `material_mask_1`, `material_mask_2`, … in order of size, up to 12, each white where that material must appear. A mask has no hue to leak. They follow the control images in AI render and in Update to ComfyUI, one image per material.
 - **Check the result for ID color leaks and retry once** (AI render page, default on): after each render the average color of every region is compared with its ID color. A region that came back in its ID hue, while its material name does not call for that hue, is logged, the image is kept as `<view>_<time>_rejected.png`, and one corrected attempt is sent. "Red brick" on a red ID is not a leak.
 

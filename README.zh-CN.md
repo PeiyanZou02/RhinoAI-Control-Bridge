@@ -207,7 +207,7 @@ Layer materials 页面顶部的 **Material ID regions from** 决定分区依据�
 
 图像模型会把饱和的纯色当成涂料，紫色 ID 区域容易被画成紫色木头。插件提供三项措施，默认开启或一键可开：
 
-- **Write the material name on each region and soften the ID colors**（Layer materials 页面，默认开）：`material_id` 使用 ID 颜色的淡彩版本（同色相、低饱和），并在每个足够大的区域上写上目标材质名。模型读文字远比读十六进制可靠；映射表引用的也是淡彩后的颜色。关闭则导出原始纯色。
+- **Soften the ID colors**（Layer materials 页面，默认开）：`material_id` 使用 ID 颜色的淡彩版本（同色相、低饱和），就算漏色也只是一点浅浅的调子；映射表引用的也是淡彩后的颜色。关闭则导出原始纯色。
 - **Also send one mask per material**（默认关）：按面积顺序输出 `material_mask_1`、`material_mask_2`……最多 12 张，每张白色处即该材质所在。蒙版没有色相可漏。AI render 和 Update to ComfyUI 都会把它们排在控制图之后，每种材质占一张图。
 - **Check the result for ID color leaks and retry once**（AI render 页面，默认开）：每次渲染后比较每个区域的平均色和它的 ID 颜色。若某区域呈现了 ID 色相、而材质名又不该是这个颜色，就记录日志、把这张图保存为 `<视图>_<时间>_rejected.png`，并带着纠正说明重试一次。红色 ID 上的 “red brick” 不算漏色。
 

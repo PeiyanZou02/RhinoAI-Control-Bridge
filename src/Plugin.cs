@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.40.1.0")]
+[assembly: System.Reflection.AssemblyVersion("0.41.0.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -94,7 +94,7 @@ namespace RhinoAI
             Check(selected,"Export selected objects only",config.SelectedOnly,"Recommended for background blend, so only the objects to insert are exported.");
             Check(autoSync,"Upload automatically when the scene changes",config.AutoSync,"Uploads images only. It never edits your prompt, starts a generation or switches the ComfyUI window.");
             Check(syncStyle,"Send the style reference photos",config.SyncReferences,"Adds the photos listed under Style reference photos on the AI render page to the Batch Images, and tells the model to borrow only their look.");
-            Check(labeledIds,"Write the material name on each region and soften the ID colors",config.MaterialIdStyle!="flat","The model reads a name on the region far more reliably than a hex code, and a pastel color leaks only a faint tint. Off: the raw flat colors.");
+            Check(labeledIds,"Soften the ID colors",config.MaterialIdStyle!="flat","material_id uses pastel versions of the ID colors, same hue at low saturation, so a leak is a faint tint at most. Off: the raw flat colors.");
             Check(materialMasks,"Also send one mask per material",config.MaterialMasks,"A white-on-black mask per material, up to 12, sent after the other images. A mask has no color to leak. Costs one image per material.");
             Check(retryLeak,"Check the result for ID color leaks and retry once",config.AiRetryOnLeak,"After each render the average hue of every region is compared with its ID color. A match is logged, the image is kept as _rejected, and one corrected attempt follows.");
             Check(tryon,"Blend into the Wallpaper background",config.ProductMode,"Uses the viewport Wallpaper photo as the base image and exports placement, masks and blend constraints for the Rhino objects.");
@@ -299,7 +299,7 @@ namespace RhinoAI
         }
         void Read()
         {
-            ReadGrid(true);config.MaterialIdSource=idSource.SelectedIndex==1?"material":"layer";config.MaterialIdStyle=labeledIds.Checked?"labeled":"flat";config.MaterialMasks=materialMasks.Checked;config.AiRetryOnLeak=retryLeak.Checked;
+            ReadGrid(true);config.MaterialIdSource=idSource.SelectedIndex==1?"material":"layer";config.MaterialIdStyle=labeledIds.Checked?"soft":"flat";config.MaterialMasks=materialMasks.Checked;config.AiRetryOnLeak=retryLeak.Checked;
             config.Server=server.Text.Trim();config.Output=output.Text.Trim();config.Workflow=workflow.Text.Trim();config.TargetWorkflow=SelectedTarget();config.LongEdge=(int)edge.Value;config.LockSceneAspect=sceneAspect.Checked;config.SelectedOnly=selected.Checked;config.ProductMode=tryon.Checked;config.MatchWallpaperAspect=wallpaperAspect.Checked;config.DetailPriority=detailPriority.Checked;config.AutoEditRegion=adaptiveMask.Checked;config.WearInstructions=wear.Text;config.MaskPadding=(int)padding.Value;config.OcclusionMask=occlusion.Text.Trim();config.AutoSync=autoSync.Checked;config.SyncReferences=syncStyle.Checked;
             string chosen=Convert.ToString(frameRatio.SelectedItem);config.FrameRatio=chosen==FrameAsIs?"frame":chosen==FrameAuto?"auto":chosen;
             StoreEngine();config.AiEngine=shown.Id;config.AiPrompt=aiPrompt.Text;config.AiOutput=aiOutput.Text.Trim();config.AiChannels=channels.CheckedItems.Cast<string>().ToList();config.AiViews=TickedViews();config.AiReferences=references.Items.Cast<string>().ToList();

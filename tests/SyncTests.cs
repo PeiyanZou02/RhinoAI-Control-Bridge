@@ -54,7 +54,7 @@ namespace RhinoAI
             check(recorder.Published["prompts"]["positive_prompt"]==null&&recorder.Published["prompts"]["wear_prompt"]==null,"no unrelated automatic style prompt published");
             check(!recorder.Published.ToString().Contains("api_key"),"no API credentials transmitted");
             check(recorder.Published["target"]==null,"no target published when following the active ComfyUI window");
-            check((string)recorder.Published["prompts"]["material_id_style"]=="labeled"&&recorder.Published["prompts"]["mask_materials"]!=null,"the ID map style and mask names travel with the manifest");
+            check((string)recorder.Published["prompts"]["material_id_style"]=="soft"&&recorder.Published["prompts"]["mask_materials"]!=null,"the ID map style and mask names travel with the manifest");
             var withMasks=ComfyClient.SelectForBatch(new Dictionary<string,string>{{"rendered",png},{"material_mask_2",png},{"material_mask_1",png},{"material_mask_10",png}},new Config{MaterialMasks=true});
             check(withMasks.Keys.SequenceEqual(new[]{"rendered","material_mask_1","material_mask_2","material_mask_10"})&&!ComfyClient.SelectForBatch(new Dictionary<string,string>{{"rendered",png},{"material_mask_1",png}},new Config()).ContainsKey("material_mask_1"),"masks join a sync in numeric order, only when asked for");
             var targeted=new Recorder();var targetConfig=new Config{Workflow="",TargetWorkflow="CHOGA.json"};

@@ -47,8 +47,8 @@ namespace RhinoAI
         // materials the objects use ("material"). Material rules reuse LayerRule: Id = material id or
         // "default", Index = a slot given once, so Index + 1 is the region key in both modes.
         public string MaterialIdSource="layer";
-        // "labeled": pastel ID colors with the material name written on each region; "flat": the raw colors.
-        public string MaterialIdStyle="labeled";
+        // "soft": pastel ID colors, same hue at low saturation; "flat": the raw colors. Older settings say "labeled" for soft.
+        public string MaterialIdStyle="soft";
         public bool MaterialMasks=false; // also send one white-on-black mask per material
         public bool AiRetryOnLeak=true;  // AI render: measure the result against the ID colors and retry once
         public List<LayerRule> Materials=new List<LayerRule>();
@@ -353,14 +353,14 @@ namespace RhinoAI
             if(visibleColors.Any(x=>x.Value==0))throw new InvalidOperationException("Material ID cannot use a pure black layer because black is the background. Change that Rhino layer color.");
             var duplicate=visibleColors.GroupBy(x=>x.Value).FirstOrDefault(g=>g.Count()>1);
             if(duplicate!=null)throw new InvalidOperationException("Several visible Rhino layers share the Material ID color "+Raster.Hex(duplicate.Key)+". Give these layers different colors, or click Assign contrast colors.");
-            bool labeled=config.MaterialIdStyle!="flat";var targets=new Dictionary<int,string>();foreach(var rule in config.Rules())targets[rule.Index+1]=rule.Material;
-            if(labeled)
+            bool soften=config.MaterialIdStyle!="flat";var targets=new Dictionary<int,string>();foreach(var rule in config.Rules())targets[rule.Index+1]=rule.Material;
+            if(soften)
             {
                 var soft=new Dictionary<int,int>();var taken=new HashSet<int>();
                 foreach(var pair in snapshot.LayerColors){int color=Raster.Soft(pair.Value);while(taken.Contains(color))color=Raster.Darken(color);taken.Add(color);soft[pair.Key]=color;}
                 snapshot.LayerColors=soft;
             }
-            var files=raster.Save(dir,snapshot.LayerColors,labeled?targets:null);
+            var files=raster.Save(dir,snapshot.LayerColors);
             if(snapshot.Rendered!=null&&snapshot.Rendered.Length>0){string rendered=Path.Combine(dir,"rendered.png");File.WriteAllBytes(rendered,snapshot.Rendered);files["rendered"]=rendered;}
             // The mapping quotes the colors that are really in material_id, softened or not.
             var rules=config.Rules().Where(x=>visible.Contains(x.Index+1)).Select(x=>new LayerRule{Id=x.Id,Index=x.Index,Name=x.Name,Material=x.Material,Description=x.Description,Color=snapshot.LayerColors.ContainsKey(x.Index+1)?Raster.Hex(snapshot.LayerColors[x.Index+1]):x.Color}).ToList();

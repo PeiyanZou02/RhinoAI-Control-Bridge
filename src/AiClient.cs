@@ -174,7 +174,6 @@ namespace RhinoAI
         public const string MaskPrefix="material_mask_";
         public static int MaskOrder(string key){int n;return int.TryParse(key.Substring(MaskPrefix.Length),out n)?n:int.MaxValue;}
         public static string MaskRole(string material){return "MATERIAL MASK for \""+material+"\": white pixels are exactly the surfaces that must be made of "+material+"; black pixels are everything else. It is a selection, never an image to draw: the output must show no white or black mask shapes";}
-        public const string MaterialIdLabels="Each region of material_id also carries its target material written on it as a short text label; read that label to know what the region is made of. The labels are metadata: never draw any text, letters or label boxes in the output.";
         public static string Label(int index,string channel){return "Image "+(index+1)+" ("+channel+")";}
         // Images an engine receives, in prompt order. Background blend always sends its own fixed bundle.
         public static List<KeyValuePair<string,string>> Select(ExportResult export,Config config,int max,List<string> notes)
@@ -201,7 +200,7 @@ namespace RhinoAI
             lines.Add("Use the supplied input images according to the exact roles below.");
             bool ids=channels.Any(c=>c.StartsWith("material_id")),scene=!channels.Contains("reference");
             if(scene)lines.Add(CameraLockStart+(channels.Contains("rendered")?"the rendered image":"the shape_lock image")+CameraLockEnd);
-            if(ids)lines.Add(MaterialIdBan+(config.MaterialIdStyle!="flat"?" "+MaterialIdLabels:""));
+            if(ids)lines.Add(MaterialIdBan);
             if(channels.Contains("reference"))lines.Add("MANDATORY REFERENCE APPEARANCE LOCK: reference alone controls the complete frame's color or monochrome mode, white balance, exposure, brightness, contrast, tonal range, colors and background. Never average, blend or transfer appearance from scale_lock, placement, masks, depth, normals, edges, shape_lock or material_id; they are technical data only.");
             if(channels.Contains("scale_lock"))lines.Add("MANDATORY CLEAN FINAL OUTPUT: return a natural finished photograph only. The scale_lock overlay is invisible metadata. Do not copy, retain, stylize, recolor or redraw any magenta/pink/purple silhouette, rectangle, center crosshair, guide line, marker, diagram, label or measurement graphic. Restore clean reference/placement pixels behind every guide mark while keeping the actual object.");
             for(int i=0;i<channels.Count;i++){string role;if(channels[i].StartsWith(StyleReferences.Prefix)){lines.Add(Label(i,channels[i])+": "+StyleReferences.Role+".");continue;}

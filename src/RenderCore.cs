@@ -93,9 +93,7 @@ namespace RhinoAI
             }
         }
         public readonly Dictionary<string,int> MaskRegions=new Dictionary<string,int>();
-        public Dictionary<string,string> Save(string directory,Dictionary<int,int> layerColors){return Save(directory,layerColors,null);}
-        // labels: target material per region, written onto material_id so the model reads names instead of hex codes.
-        public Dictionary<string,string> Save(string directory,Dictionary<int,int> layerColors,Dictionary<int,string> labels)
+        public Dictionary<string,string> Save(string directory,Dictionary<int,int> layerColors)
         {
             Directory.CreateDirectory(directory);
             var visible=Depth.Where(d=>!float.IsInfinity(d)).ToArray();
@@ -149,7 +147,7 @@ namespace RhinoAI
                 maps["shape_lock"][i]=Rgb(shade,shade,shade);
             }
             var files=new Dictionary<string,string>();
-            foreach(var m in maps){string path=Path.Combine(directory,m.Key+".png");if(m.Key=="material_id"&&labels!=null)SaveLabeled(path,w,h,m.Value,labels);else SavePng(path,w,h,m.Value);files[m.Key]=path;}
+            foreach(var m in maps){string path=Path.Combine(directory,m.Key+".png");SavePng(path,w,h,m.Value);files[m.Key]=path;}
             // One white-on-black mask per material region, largest first: a selection has no hue to leak.
             MaskRegions.Clear();int number=0;
             foreach(var region in Materials.Where(x=>x>0).GroupBy(x=>x).OrderByDescending(g=>g.Count()).Select(g=>g.Key).Take(12))
@@ -159,46 +157,6 @@ namespace RhinoAI
             }
             using(var writer=new BinaryWriter(File.Create(Path.Combine(directory,"depth_linear.f32"))))foreach(float d in Depth)writer.Write(float.IsInfinity(d)?float.NaN:d);
             return files;
-        }
-        // The material name on each region, at the region pixel nearest its centroid, white with a dark outline.
-        void SaveLabeled(string path,int w,int h,int[] pixels,Dictionary<int,string> labels)
-        {
-            int n=w*h;var count=new Dictionary<int,int>();var sumX=new Dictionary<int,double>();var sumY=new Dictionary<int,double>();
-            for(int i=0;i<n;i++){int r=Materials[i];if(r==0)continue;int c;count.TryGetValue(r,out c);count[r]=c+1;double sx,sy;sumX.TryGetValue(r,out sx);sumY.TryGetValue(r,out sy);sumX[r]=sx+i%w;sumY[r]=sy+i/w;}
-            using(var bitmap=new Bitmap(w,h,PixelFormat.Format32bppRgb))
-            {
-                var data=bitmap.LockBits(new Rectangle(0,0,w,h),ImageLockMode.WriteOnly,PixelFormat.Format32bppRgb);
-                try{for(int y=0;y<h;y++)Marshal.Copy(pixels,y*w,IntPtr.Add(data.Scan0,y*data.Stride),w);}finally{bitmap.UnlockBits(data);}
-                float size=Math.Max(11f,Math.Min(w,h)/48f);
-                using(var g=Graphics.FromImage(bitmap))using(var family=new FontFamily("Segoe UI"))using(var font=new Font(family,size,FontStyle.Bold,GraphicsUnit.Pixel))using(var pen=new Pen(Color.Black,Math.Max(2f,size/5f)){LineJoin=System.Drawing.Drawing2D.LineJoin.Round})
-                {
-                    g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;g.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                    foreach(var region in count.Keys.OrderByDescending(r=>count[r]))
-                    {
-                        string text;if(count[region]<n*0.002||!labels.TryGetValue(region,out text)||string.IsNullOrWhiteSpace(text))continue;
-                        double cx=sumX[region]/count[region],cy=sumY[region]/count[region];int best=-1;double bestDistance=double.MaxValue;
-                        for(int i=0;i<n;i+=3){if(Materials[i]!=region)continue;double dx=i%w-cx,dy=i/w-cy,d=dx*dx+dy*dy;if(d<bestDistance){bestDistance=d;best=i;}}
-                        if(best<0)continue;var measured=g.MeasureString(text,font);int need=(int)Math.Ceiling(measured.Width)+4,px=best%w,py=best/w;
-                        // Centre the label on a run of the region long enough to hold it, on this row or a few rows away.
-                        double runDistance=double.MaxValue;
-                        foreach(int dy in new[]{0,1,-1,2,-2,3,-3})
-                        {
-                            int row=best/w+(int)Math.Round(dy*size*1.2);if(row<0||row>=h)continue;
-                            for(int start=0;start<w;)
-                            {
-                                if(Materials[row*w+start]!=region){start++;continue;}
-                                int end=start;while(end<w&&Materials[row*w+end]==region)end++;
-                                if(end-start>=need){int centre=Math.Max(start+need/2,Math.Min(end-need/2,(int)cx));double d=Math.Abs(centre-cx)+Math.Abs(row-cy);if(d<runDistance){runDistance=d;px=centre;py=row;}}
-                                start=end;
-                            }
-                            if(runDistance<double.MaxValue)break;
-                        }
-                        float x=Math.Max(2f,Math.Min(w-measured.Width-2f,px-measured.Width/2f)),y=Math.Max(2f,Math.Min(h-measured.Height-2f,py-measured.Height/2f));
-                        using(var outline=new System.Drawing.Drawing2D.GraphicsPath()){outline.AddString(text,family,(int)FontStyle.Bold,size,new PointF(x,y),StringFormat.GenericDefault);g.DrawPath(pen,outline);g.FillPath(Brushes.White,outline);}
-                    }
-                }
-                bitmap.Save(path,ImageFormat.Png);
-            }
         }
         // The same hue at low saturation and high value: still tells regions apart, leaks only a faint tint.
         public static int Soft(int rgb)
