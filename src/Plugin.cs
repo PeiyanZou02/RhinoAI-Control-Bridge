@@ -14,7 +14,7 @@ using Rhino.PlugIns;
 using Newtonsoft.Json.Linq;
 
 [assembly: System.Reflection.AssemblyTitle("Rhino to Comfy")]
-[assembly: System.Reflection.AssemblyVersion("0.40.0.0")]
+[assembly: System.Reflection.AssemblyVersion("0.40.1.0")]
 [assembly: Guid("66587CA6-F24F-49B2-83C1-8E616089B2C4")]
 
 namespace RhinoAI
@@ -117,7 +117,7 @@ namespace RhinoAI
             material.Controls.Add(sourceRow,0,0);
             idSource.SelectedIndexChanged+=(s,e)=>{ReadGrid(false);config.MaterialIdSource=idSource.SelectedIndex==1?"material":"layer";if(doc!=null)config.Scan(doc);FillLayers();};
             var materialActions=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,Theme.S(16))};
-            materialActions.Controls.Add(Tip(Button("Reload from Rhino",delegate{Read();config.Scan(doc);FillLayers();}),"Reads the layers, materials and colors from Rhino again."));
+            materialActions.Controls.Add(Tip(Button("Reload from Rhino",ReloadFromRhino),"Reads the layers, materials and colors from Rhino again, and lists which objects use which material."));
             materialActions.Controls.Add(Tip(Button("Assign contrast colors",AssignHighContrastColors),"Gives every row a distinct Material ID color. For layers this changes the layer display color, with undo; for materials only the export color changes."));
             materialActions.Controls.Add(Tip(Button("Names as targets",delegate{ReadGrid(false);foreach(var rule in config.Rules())rule.Material=MaterialRules.TargetFromName(rule.Name);FillLayers();config.Save();Log("Target materials filled from the "+(config.ByMaterial()?"material":"layer")+" names. Edit any row that needs a fuller description.");}),"Writes every Rhino name into Target material, cleaned up: library prefixes and parent layers dropped, underscores to spaces. Replaces what is there."));
             createMaterials=Button("Create layer materials",delegate{Read();ApplyMaterials();});materialActions.Controls.Add(Tip(createMaterials,"Creates basic Rhino materials from the target materials in the table. Undo is supported. Only for layer regions."));
@@ -357,6 +357,23 @@ namespace RhinoAI
             if(frame!=null&&announce)Log("Frame set to "+frame[0]+":"+frame[1]+" for "+provider.Name+", so the result lines up with the Rhino view.");
             // Engines that accept any size fall back to the Frame ratio setting, like Update to ComfyUI.
             return Exporter.Capture(doc,config,frame);
+        }
+        // Blank targets must not block a reload. The log then shows where every object landed, so a material that
+        // seems to be missing can be traced to the object and the layer it sits on.
+        void ReloadFromRhino()
+        {
+            ReadGrid(false);config.Scan(doc);FillLayers();
+            var settings=new Rhino.DocObjects.ObjectEnumeratorSettings{NormalObjects=true,LockedObjects=true,HiddenObjects=false,ReferenceObjects=true};
+            var usage=new Dictionary<string,List<string>>();int objects=0;
+            foreach(var obj in doc.Objects.GetObjectList(settings))
+            {
+                objects++;var mat=Exporter.ObjectMaterial(obj,null);var rule=config.MaterialRule(mat);
+                string source=obj.Attributes.MaterialSource.ToString().Replace("MaterialFrom","by ");
+                string where=doc.Layers[obj.Attributes.LayerIndex].Name+" ("+source+(obj is Rhino.DocObjects.InstanceObject?", block":"")+")";
+                List<string> list;if(!usage.TryGetValue(rule.Name,out list))usage[rule.Name]=list=new List<string>();if(!list.Contains(where))list.Add(where);
+            }
+            Log("Reloaded: "+config.Layers.Count+" layers, "+config.Materials.Count+" materials on "+objects+" objects.");
+            foreach(var pair in usage)Log("  "+pair.Key+" \u2190 layer "+string.Join(", ",pair.Value));
         }
         static string FileName(string text){var invalid=Path.GetInvalidFileNameChars();string clean=new string((text??"").Select(c=>invalid.Contains(c)?'_':c).ToArray()).Trim().TrimEnd('.');return clean==""?"view":clean;}
         async Task RenderViews()
